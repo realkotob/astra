@@ -788,6 +788,7 @@ class Astra():
                 t0 = datetime.utcnow()
                 while count < action_value['n'][i] and (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) and self.error_free:
                     r = camera.get('ImageReady')
+                    time.sleep(0) # yield to other threads
                     if r['status'] == "success":
                         if r['data'] is True:
                             
@@ -847,6 +848,7 @@ class Astra():
         while (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) and self.weather_safe and self.error_free:            
             
             r = camera.get('ImageReady') # have a timeout in else part?
+            time.sleep(0) # yield to other threads
             if r['status'] == "success":
                 if r['data'] is True:
                     t0 = datetime.utcnow() # get rid of this?
@@ -957,6 +959,7 @@ class Astra():
             getting_exposure_time = True
             while getting_exposure_time:
                 r = camera.get('ImageReady') # have a timeout in else part?
+                time.sleep(0) # yield to other threads
                 if r['status'] == "success":
                     if r['data'] is True:
                         r = camera.get('ImageArray')
@@ -991,6 +994,7 @@ class Astra():
                     break
 
                 r = camera.get('ImageReady') # have a timeout in else part?
+                time.sleep(0) # yield to other threads
                 if r['status'] == "success":
                     if r['data'] is True:
                         r = camera.get('ImageArray')
