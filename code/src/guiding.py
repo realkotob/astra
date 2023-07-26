@@ -17,7 +17,10 @@ from shutil import copyfile
 from donuts import Donuts
 from donuts.image import Image
 
-from scipy.ndimage import median_filter # todo: check this is the right one
+from scipy import ndimage
+
+from photutils.background import Background2D, MedianBackground
+from astropy.stats import SigmaClip
 
 from alpaca.telescope import GuideDirections
 
@@ -54,10 +57,17 @@ MAX_ERROR_STABIL_PIXELS = 40
 
 class CustomImageClass(Image):
     def preconstruct_hook(self):
-        clean = median_filter(self.raw_image, size=4, mode='mirror')
-        band_corr = np.median(clean, axis=1).reshape(-1, 1)
-        band_clean = clean - band_corr
-        self.raw_image = band_clean
+        sigma_clip = SigmaClip(sigma=3.0)
+        bkg_estimator = MedianBackground()
+
+        bkg = Background2D(self.raw_image, (32, 32), filter_size=(3, 3), sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
+        bkg_clean = self.raw_image - bkg.background
+
+        med_clean = ndimage.median_filter(bkg_clean, size=5, mode='mirror')
+        band_corr = np.median(med_clean, axis=1).reshape(-1, 1)
+        image_clean = med_clean - band_corr
+
+        self.raw_image = image_clean
 
 class Guider():
     def __init__(self, telescope, cursor, params):

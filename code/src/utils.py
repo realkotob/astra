@@ -2,11 +2,26 @@ import math
 import os
 from datetime import datetime, timedelta
 
-import astropy.units as u
 import numpy as np
 import pandas as pd
-from astropy.coordinates import AltAz, get_sun
+from astropy.coordinates import AltAz, get_sun, SkyCoord
+from astropy.io import fits
+from astropy.stats import SigmaClip
 from astropy.time import Time
+import astropy.units as u
+from astropy.wcs import utils
+
+from astropy.units import Quantity
+
+from photutils.background import Background2D, MedianBackground
+
+from scipy import ndimage
+
+import twirl
+
+from typing import Optional, Tuple, Union
+
+import sqlite3
 
 
 def __to_format(jd: float, fmt: str) -> float:
@@ -84,7 +99,6 @@ def getLightTravelTimes(target, time_to_correct):
     ltt_bary = time_to_correct.light_travel_time(target)
     ltt_helio = time_to_correct.light_travel_time(target, 'heliocentric')
     return ltt_bary, ltt_helio
-
 
 def time_conversion(jd, location, target):
 
@@ -165,8 +179,6 @@ def hdr_times(hdr, fits_config, location, target):
     z = (90 - hdr['ALTITUDE']) * np.pi/180
     hdr['AIRMASS'] = (1.002432*np.cos(z)**2 + 0.148386*np.cos(z) + 0.0096467) /  (np.cos(z)**3 + 0.149864*np.cos(z)**2 + 0.0102963*np.cos(z) + 0.000303978) # https://doi.org/10.1364/AO.33.001108, https://en.wikipedia.org/wiki/Air_mass_(astronomy)
 
-
-
 def is_sun_rising(obs_location):
     # sun's position now
     obs_time0 = Time.now()
@@ -196,3 +208,226 @@ def is_sun_rising(obs_location):
             flat_ready = True
 
     return sun_rising, flat_ready, sun_altaz0
+
+## pointing
+def db_query(db: str, min_dec: float, max_dec: float, min_ra: float, max_ra: float) -> pd.DataFrame:
+    """
+    Queries a federated database for astronomical data within a specified range of declination and right ascension.
+
+    Args:
+        db (str): The path to the SQLite database file.
+        min_dec (float): The minimum declination value to query.
+        max_dec (float): The maximum declination value to query.
+        min_ra (float): The minimum right ascension value to query.
+        max_ra (float): The maximum right ascension value to query.
+
+    Returns:
+        pd.DataFrame: A pandas DataFrame containing the queried astronomical data.
+    """
+
+    conn = sqlite3.connect(db)
+
+    # Determine the relevant shard(s) based on the query parameters.
+    arr = np.arange(np.floor(min_dec), np.ceil(max_dec) + 1, 1)
+    relevant_shard_ids = set()
+    for i in range(len(arr) - 1):
+        shard_id = f"{arr[i]:.0f}_{arr[i+1]:.0f}"
+        relevant_shard_ids.add(shard_id)
+
+    # Execute the federated query across the relevant shard(s).
+    df_total = pd.DataFrame()
+    for shard_id in relevant_shard_ids:
+        shard_table_name = f'{shard_id}'
+        q = f'SELECT * FROM `{shard_table_name}` WHERE dec BETWEEN {min_dec} AND {max_dec} AND ra BETWEEN {min_ra} AND {max_ra}'
+        df = pd.read_sql_query(q, conn)
+        df_total = pd.concat([df, df_total], axis=0)
+
+    # Close the conn and return the results.
+    conn.close()
+    return df_total
+
+def gaia_db_query(
+    center: Union[Tuple[float, float], SkyCoord],
+    fov: Union[float, Quantity],
+    limit: int = 1000,
+    tmass: bool = False,
+    dateobs: Optional[datetime] = None,
+) -> np.ndarray:
+    """
+    Query the Gaia archive to retrieve the RA-DEC coordinates of stars within a given field-of-view (FOV) centered on a given sky position.
+
+    Parameters
+    ----------
+    center : tuple or astropy.coordinates.SkyCoord
+        The sky coordinates of the center of the FOV. If a tuple is given, it should contain the RA and DEC in degrees.
+    fov : float or astropy.units.Quantity
+        The field-of-view of the FOV in degrees. If a float is given, it is assumed to be in degrees.
+    limit : int, optional
+        The maximum number of sources to retrieve from the Gaia archive. By default, it is set to 10000.
+    circular : bool, optional
+        Whether to perform a circular or a rectangular query. By default, it is set to True.
+    tmass : bool, optional
+        Whether to retrieve the 2MASS J magnitudes catelog. By default, it is set to False.
+    dateobs : datetime.datetime, optional
+        The date of the observation. If given, the proper motions of the sources will be taken into account. By default, it is set to None.
+
+    Returns
+    -------
+    np.ndarray
+        An array of shape (n, 2) containing the RA-DEC coordinates of the retrieved sources in degrees.
+
+    Raises
+    ------
+    ImportError
+        If the astroquery package is not installed.
+
+    Examples
+    --------
+    >>> from astropy.coordinates import SkyCoord
+    >>> from twirl import gaia_radecs
+    >>> center = SkyCoord(ra=10.68458, dec=41.26917, unit='deg')
+    >>> fov = 0.1
+    >>> radecs = gaia_radecs(center, fov)
+    """
+
+    if isinstance(center, SkyCoord):
+        ra = center.ra.deg
+        dec = center.dec.deg
+    else:
+        ra, dec = center
+
+    if not isinstance(fov, u.Quantity):
+        fov = fov * u.deg
+
+    if fov.ndim == 1:
+        ra_fov, dec_fov = fov.to(u.deg).value
+    else:
+        ra_fov = dec_fov = fov.to(u.deg).value
+
+    min_dec = dec - dec_fov/2
+    max_dec = dec + dec_fov/2
+    min_ra = ra - ra_fov/2
+    max_ra = ra + ra_fov/2
+
+    table = db_query('/Users/peter/Github/gaia-tmass-sqlite/db/gaia_tmass_16_jm_cut.db', min_dec, max_dec, min_ra, max_ra)
+    if tmass:
+        table = table.sort_values(by=['j_m']).reset_index(drop=True)
+    else:
+        table = table.sort_values(by=['phot_g_mean_mag']).reset_index(drop=True)
+
+    table.replace('', np.nan, inplace=True)
+    table.dropna(inplace=True)
+    
+    print(table)
+    
+    # limit number of stars
+    table = table[0:limit]
+
+    # add proper motion to ra and dec
+    if dateobs is not None:
+        # calculate fractional year
+        dateobs = dateobs.year + (dateobs.timetuple().tm_yday - 1) / 365.25 # type: ignore
+        
+        years = dateobs - 2015.5 # type: ignore
+        table["ra"] += years * table["pmra"] / 1000 / 3600
+        table["dec"] += years * table["pmdec"] / 1000 / 3600    
+        
+    return np.array([table["ra"].values, table["dec"].values]).T
+
+def point_correction(filepath, ra, dec):
+
+    t0 = datetime.now()
+
+    # open image
+    with fits.open(filepath) as hdu:
+        header = hdu[0].header 
+        data = hdu[0].data
+
+    print("Image opened in", datetime.now() - t0)
+
+    t0 = datetime.now()
+
+    # clean image
+    sigma_clip = SigmaClip(sigma=3.0)
+    bkg_estimator = MedianBackground()
+
+    bkg = Background2D(data, (32, 32), filter_size=(3, 3), sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
+    bkg_clean = data - bkg.background
+
+    med_clean = ndimage.median_filter(bkg_clean, size=5, mode='mirror')
+    band_corr = np.median(med_clean, axis=1).reshape(-1, 1)
+    image_clean = med_clean - band_corr
+
+    print("Image cleaned in", datetime.now() - t0)
+
+    t0 = datetime.now()
+
+    # image fov
+    shape = image_clean.shape
+    pixel = np.arctan((header['XPIXSZ']*1e-6)/(header['FOCALLEN']*1e-3))*(180/np.pi)*3600 * u.arcsec
+    fov = np.max(shape)*pixel.to(u.deg).value
+
+    # center of image, convert to ra, dec in degrees
+    ra_unit = u.deg
+    dec_unit = u.deg
+
+    center = SkyCoord(ra, dec, unit=[ra_unit, dec_unit])
+    center = (center.ra.deg, center.dec.deg)
+
+    print("Image fov and center calculated in", datetime.now() - t0)
+
+    t0 = datetime.now()
+
+    # detect stars in the image
+    stars = twirl.find_peaks(image_clean, threshold=5)
+
+    gaia_limit = len(stars)*2
+    star_limit = len(stars)
+    if len(stars) < 4:
+        raise Exception("Not enough stars detected for plate solve")
+    elif len(stars) > 12:
+        gaia_limit = 18
+        star_limit = 12
+
+    stars = stars[0:star_limit]
+    
+    # get gaia stars in the field of view
+    dateobs = pd.to_datetime(header['DATE-OBS'])
+    gaias = gaia_db_query(center, 1 * fov, tmass=True, dateobs=dateobs)[0:gaia_limit]
+    # gaias = gaia_radecs(center, 1.41 * fov, tmass=True, dateobs=dateobs)[0:gaia_limit]
+
+    print("Stars detected and gaia stars retrieved in", datetime.now() - t0)
+
+    t0 = datetime.now()
+
+    wcs = twirl.compute_wcs(stars, gaias)
+    real_center = utils.pixel_to_skycoord(image_clean.shape[1]/2,image_clean.shape[0]/2, wcs)
+    offset = np.array([real_center.ra.deg - center[0], real_center.dec.deg - center[1]])
+
+    print("WCS calculated in", datetime.now() - t0)
+
+    t0 = datetime.now()
+
+    #  if offset is too large, consider plate solve failed
+    if np.max(np.abs(offset)) > np.max(fov):
+        raise Exception("Plate solve failed")
+    
+    # convert gaia stars to pixel coordinates
+    gaias_pixel = np.array(SkyCoord(gaias, unit="deg").to_pixel(wcs)).T
+
+    # iterate through gaia stars and find the closest star in the image
+    count = 0
+    for x, y in gaias_pixel:
+        for i, j in stars:
+            # if the distance between the gaia star and the star 
+            # in the image is less than 10 pixels, count it as a match
+            if np.sqrt((x-i)**2 + (y-j)**2) < 10:
+                count += 1
+
+    # if more than 4 stars match, consider plate solve successful
+    if count < 4:
+        raise Exception("Plate solve failed, not enough stars matched")
+    
+    print("Plate solve successful check in", datetime.now() - t0)
+
+    return offset[0], offset[1], wcs

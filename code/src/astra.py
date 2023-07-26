@@ -1002,16 +1002,6 @@ class Astra():
 
         hdr['EXPTIME'] = action_value['exptime']
         camera = self.devices[row['device_type']][row['device_name']]
-        
-        if 'guiding' in action_value:
-            if action_value['guiding'] is True:
-
-                glob_str = f"../images/{folder}/{row['device_name']}_{action_value['filter']}_{action_value['object']}_{action_value['exptime']}_*.fits"
-
-                th = Thread(target=self.guider[paired_devices['Telescope']].guider_loop, args=(camera.device_name, glob_str,), daemon=True)
-                th.start()
-
-                self.threads.append({'type': 'guider', 'device_name': row['device_name'], 'thread': th, 'id' : 'guider'})
 
         r = camera.get('MaxADU')
         if r['status'] != "success":
@@ -1028,6 +1018,9 @@ class Astra():
 
         # TODO:
         # plate solve loop till centered?
+        pointing_complete = False
+        guiding = False
+        # only start guiding once plate solved and centered
 
         while (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) and self.weather_safe and self.error_free and (self.interrupt is False):            
             
@@ -1050,7 +1043,45 @@ class Astra():
 
                     # save image
                     self.__log('debug', f"Saving image from {row['device_name']}")
-                    self.save_image(camera, hdr, dateobs, t0, maxadu, folder)
+                    filepath = self.save_image(camera, hdr, dateobs, t0, maxadu, folder)
+
+                    # pointing correction if not already done
+                    if 'pointing' in action_value and pointing_complete is False:
+                        self.__log('info', f"Running pointing correction for {action_value['object']} with {row['device_name']}")
+
+                        offset_ra, offset_dec, wcs = utils.point_correction(filepath, action_value['ra'], action_value['dec'])
+
+                        pointing_threshold = 0.1 / 60 # 0.1 arcmin
+                        if (abs(offset_ra) < pointing_threshold) or (abs(offset_dec) < pointing_threshold):
+                            self.__log('info', f"No further pointing correction required. Correction of {offset_ra*60}\" {offset_dec*60}\" within threshold of {pointing_threshold*60}\"")
+                            pointing_complete = True
+                        else:
+                            self.__log('info', f"Pointing correction of {offset_ra*60}\" {offset_dec*60}\" required")
+                            # sync telescope to corrected coordinates
+                            telescope = self.devices['Telescope'][paired_devices['Telescope']]
+                            r = telescope.get('SyncToCoordinates')
+                            if r['status'] == "success":
+                                r['data'](RightAscension = 24*(action_value['ra'] + offset_ra)/360, Declination = action_value['dec'] + offset_dec)
+                            else:
+                                raise ValueError(r)
+                            
+                            # re-slew to target
+                            self.prep_observatory(paired_devices, action_value)
+                    else:
+                        pointing_complete = True
+
+                    if 'guiding' in action_value and guiding is False and pointing_complete is True:
+                        if action_value['guiding'] is True:
+
+                            glob_str = f"../images/{folder}/{row['device_name']}_{action_value['filter']}_{action_value['object']}_{action_value['exptime']}_*.fits"
+
+                            th = Thread(target=self.guider[paired_devices['Telescope']].guider_loop, args=(camera.device_name, glob_str,), daemon=True)
+                            th.start()
+
+                            self.threads.append({'type': 'guider', 'device_name': row['device_name'], 'thread': th, 'id' : 'guider'})
+
+                            guiding = True
+
 
                     # start next exposure
                     self.__log('debug', f"Exposing {row['device_name']} again")
@@ -1311,6 +1342,8 @@ class Astra():
             self.cursor.execute(f"INSERT INTO images VALUES ('{filepath}', '{device.device_name}', '{0}', '{dt}')")
             self.__log('info', f"Image saved as {filepath.split('/')[-1]}")
             self.__log('info', f"Image acquired in {datetime.utcnow() - t0}")
+
+            return filepath
         else:
             raise ValueError(r)
     
