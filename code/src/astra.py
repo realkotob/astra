@@ -11,12 +11,13 @@ import utils
 from guiding import Guider
 import yaml
 import os
-from alpaca_device import AlpacaDevice
+from alpaca_device_process import AlpacaDevice
 from astropy.coordinates import EarthLocation, SkyCoord
 from astropy.io import fits
 from astropy.time import Time
 from sqlite3worker import Sqlite3Worker  # https://github.com/dashawn888/sqlite3worker
 
+from multiprocessing import Manager
 
 def update_times(df, time_factor):
     '''
@@ -70,6 +71,14 @@ class Astra():
         self.debug = debug
         self.truncate_schedule = truncate_schedule
 
+        self.threads = []
+        self.queue = Manager().Queue()
+
+        th = Thread(target=self.queue_get, daemon=True)
+        th.start()
+
+        self.threads.append({'type': 'queue', 'device_name': 'queue', 'thread': th, 'id' : 'queue'})
+
         self.db_name, self.cursor = self.create_db(config_filename)
 
         if self.debug is True:
@@ -105,8 +114,6 @@ class Astra():
                 if 'guider' in self.observatory['Telescope'][telescope_index]:
                     guider_params = self.observatory['Telescope'][telescope_index]['guider']
                     self.guider[device_name] = Guider(telescope, self.cursor, guider_params)
-
-        self.threads = []
 
         self.__log('info', 'Astra initialized')
     
@@ -207,9 +214,10 @@ class Astra():
                         devices[device_type][d['device_name']] = AlpacaDevice(d['ip'], 
                                                                               device_type, 
                                                                               d['device_number'], 
-                                                                              d['device_name'], 
-                                                                              self.cursor,
+                                                                              d['device_name'],
+                                                                              self.queue, 
                                                                               self.debug)
+                        devices[device_type][d['device_name']].start()
                     except Exception as e:
                         self.__log('error', f"Error loading {device_type} {d['device_name']}: {str(e)}")
         
@@ -277,6 +285,8 @@ class Astra():
                     self.__log('info', f"{device_type} {device_name} disconnected")
                 else:
                     self.__log('error', f"{device_type} {device_name} not disconnected")
+                
+                self.devices[device_type][device_name].stop()
 
         self.__log('info', 'Disconnect all sequence complete')
 
@@ -400,7 +410,7 @@ class Astra():
                 last_update = (datetime.utcnow() - sm_poll['data']['IsSafe']['datetime']).total_seconds()
 
                 match last_update:
-                    case _ if last_update > 10 and last_update < 30:
+                    case _ if last_update > 1.5 and last_update < 30:
                         self.__log('warning', f"Safety monitor {last_update}s stale")
                     case _ if last_update > 30:
                         self.__log('error', f"Safety monitor {last_update}s stale")
@@ -1016,11 +1026,9 @@ class Astra():
         else:
             raise ValueError(r)
 
-        # TODO:
-        # plate solve loop till centered?
+
         pointing_complete = False
         guiding = False
-        # only start guiding once plate solved and centered
 
         while (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) and self.weather_safe and self.error_free and (self.interrupt is False):            
             
@@ -1047,29 +1055,31 @@ class Astra():
 
                     # pointing correction if not already done
                     if 'pointing' in action_value and pointing_complete is False:
-                        self.__log('info', f"Running pointing correction for {action_value['object']} with {row['device_name']}")
+                        if action_value['pointing'] is True:
+                            self.__log('info', f"Running pointing correction for {action_value['object']} with {row['device_name']}")
 
-                        offset_ra, offset_dec, wcs = utils.point_correction(filepath, action_value['ra'], action_value['dec'])
+                            offset_ra, offset_dec, wcs = utils.point_correction(filepath, action_value['ra'], action_value['dec'])
 
-                        pointing_threshold = 0.1 / 60 # 0.1 arcmin
-                        if (abs(offset_ra) < pointing_threshold) or (abs(offset_dec) < pointing_threshold):
-                            self.__log('info', f"No further pointing correction required. Correction of {offset_ra*60}\" {offset_dec*60}\" within threshold of {pointing_threshold*60}\"")
-                            pointing_complete = True
-                        else:
-                            self.__log('info', f"Pointing correction of {offset_ra*60}\" {offset_dec*60}\" required")
-                            # sync telescope to corrected coordinates
-                            telescope = self.devices['Telescope'][paired_devices['Telescope']]
-                            r = telescope.get('SyncToCoordinates')
-                            if r['status'] == "success":
-                                r['data'](RightAscension = 24*(action_value['ra'] + offset_ra)/360, Declination = action_value['dec'] + offset_dec)
+                            pointing_threshold = 0.1 / 60 # 0.1 arcmin
+                            if (abs(offset_ra) < pointing_threshold) or (abs(offset_dec) < pointing_threshold):
+                                self.__log('info', f"No further pointing correction required. Correction of {offset_ra*60}\" {offset_dec*60}\" within threshold of {pointing_threshold*60}\"")
+                                pointing_complete = True
                             else:
-                                raise ValueError(r)
-                            
-                            # re-slew to target
-                            self.prep_observatory(paired_devices, action_value)
+                                self.__log('info', f"Pointing correction of {offset_ra*60}\" {offset_dec*60}\" required")
+                                # sync telescope to corrected coordinates
+                                telescope = self.devices['Telescope'][paired_devices['Telescope']]
+                                r = telescope.get('SyncToCoordinates')
+                                if r['status'] == "success":
+                                    r['data'](RightAscension = 24*(action_value['ra'] + offset_ra)/360, Declination = action_value['dec'] + offset_dec)
+                                else:
+                                    raise ValueError(r)
+                                
+                                # re-slew to target
+                                self.prep_observatory(paired_devices, action_value)
                     else:
                         pointing_complete = True
 
+                    # initialise guiding once pointing correction is complete
                     if 'guiding' in action_value and guiding is False and pointing_complete is True:
                         if action_value['guiding'] is True:
 
@@ -1081,7 +1091,6 @@ class Astra():
                             self.threads.append({'type': 'guider', 'device_name': row['device_name'], 'thread': th, 'id' : 'guider'})
 
                             guiding = True
-
 
                     # start next exposure
                     self.__log('debug', f"Exposing {row['device_name']} again")
@@ -1562,3 +1571,17 @@ class Astra():
         else:
             self.__log("error", f"{device_type} not found in observatory.")
             return {'status': 'error', 'data': False, 'message': f"{device_type} not found in observatory."}
+    
+    def queue_get(self):
+
+        while True:
+            try:
+                r = self.queue.get()
+                
+                if r['type'] == 'query':
+                    self.cursor.execute(r['data'])
+                elif r['type'] == 'log':
+                    self.__log(r['data'][0], r['data'][1])
+
+            except Exception as e:
+                self.__log("error", f"Queue get error: {str(e)}")

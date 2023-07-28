@@ -166,7 +166,7 @@ class AlpacaDevice():
             del self._poll_latest[method]
             self.__log('info', f'{self.device_type}, {self.device_name}, {method} poll stopped. {self._poll_list} left in poll list, and {self._poll_latest} left in poll dict')
         else:
-            self.__log('error', f'Stop poll error: {self.device_type}, {self.device_name}, {method} not in poll list.')
+            self.__log('warning', f'Stop poll error: {self.device_type}, {self.device_name}, {method} not in poll list.')
 
     def poll_list(self):
         try:

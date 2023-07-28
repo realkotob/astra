@@ -62,8 +62,8 @@ def kill_observatories():
     # TODO: kill processes (when it is a process)
     if len(observatories) > 0:
         print('Killing observatories')
-        for obs in observatories.values():
-            obs.disconnect_all()
+        # for obs in observatories.values():
+        #     obs.disconnect_all()
 
         observatories = {}
 

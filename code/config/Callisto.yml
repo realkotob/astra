@@ -24,6 +24,7 @@ Telescope:
 Focuser:
   - device_name: focuser_Callisto
     ip: 10.211.55.3:11111
+    ip_old: localhost:8001
     device_number: 0
     focus_pos: 10000
 Dome:
