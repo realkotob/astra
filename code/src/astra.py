@@ -544,6 +544,14 @@ class Astra():
         '''
         
         if 'Telescope' in self.observatory:
+
+            # stop telescope slewing
+            r = self.monitor_action('Telescope', 'Slewing', False, 'AbortSlew')
+            if r['status'] != 'success':
+                self.__log('error', 'Error stopping telescope(s) slewing')
+                self.error_source.append({'type': 'Telescope', 'device_name': '', 'error': 'Error stopping telescope(s) slewing'})
+                return False
+            
             # stop telescope tracking
             for device_name in self.devices['Telescope']:
                 telescope = self.devices['Telescope'][device_name]
@@ -554,13 +562,6 @@ class Astra():
                     self.__log('error', f"Error stopping telescope {device_name} tracking: {str(e)}")
                     self.error_source.append({'type': 'Telescope', 'device_name': device_name, 'error': f"Error stopping telescope {device_name} tracking: {str(e)}"})
                     return False
-
-            # stop telescope slewing
-            r = self.monitor_action('Telescope', 'Slewing', False, 'AbortSlew')
-            if r['status'] != 'success':
-                self.__log('error', 'Error stopping telescope(s) slewing')
-                self.error_source.append({'type': 'Telescope', 'device_name': '', 'error': 'Error stopping telescope(s) slewing'})
-                return False
             
             # park telescope
             r = self.monitor_action('Telescope', 'AtPark', True, 'Park')
@@ -610,9 +611,15 @@ class Astra():
 
             self.threads.append({'type': 'AbortSlew', 'device_name': 'all_telescopes', 'thread': th, 'id' : -3})
 
+            # stop telescope tracking
             for d in self.devices['Telescope']:
                 device = self.devices['Telescope'][d]
-                device.set('Tracking', False)
+                try:
+                    device.set('Tracking', False)
+                except Exception as e:
+                    self.__log('error', f"Error stopping telescope {d} tracking: {str(e)}")
+                    self.error_source.append({'type': 'Telescope', 'device_name': d, 'error': f"Error stopping telescope {d} tracking: {str(e)}"})
+                    break
 
                 self.guider[d].running = False
 
@@ -697,8 +704,6 @@ class Astra():
         '''
         Run the schedule
         Interruptible by user and weather conditions
-        while loop?
-        run in thread
         '''
 
         while self.weather_safe is None:
@@ -709,7 +714,6 @@ class Astra():
         self.schedule_running = True
         for i, row in self.schedule.iterrows():
 
-            # safety check
             # run if weather safe, or the action is calibration (bias, dark)
             if (self.weather_safe is True) or (row['action_type'] in ['calibration']):
 
@@ -723,18 +727,13 @@ class Astra():
                 # if not running, start thread
                 if i not in ids:
                     run_row = True
-                    while run_row and self.schedule_running and self.weather_safe and self.error_free:
+                    while run_row and self.schedule_running and ((self.weather_safe is True) or (row['action_type'] in ['calibration'])) and self.error_free and (self.interrupt is False):
                         t = datetime.utcnow()
                         
                         if row['start_time'] >= t:
-                            # print((row['start_time'] - t).total_seconds(), 'seconds until')
-                            # see last row in log
-                            # rows = self.cursor.execute("SELECT * FROM log ORDER BY id DESC LIMIT 1")
-                            # if rows[0]['message'] != f"Waiting for {row['device_name']} {row['action_type']} to start":
-                            #     self.__log('info', f"Waiting for {row['device_name']} {row['action_type']} to start")
                             time.sleep(1)
 
-                        elif (row['start_time'] <= t) and (row['end_time'] >= t) and (row['repeatable'] is True):
+                        elif (row['start_time'] <= t) and (row['end_time'] >= t): # and (row['repeatable'] is True)
 
                             th = Thread(target=self.run_action, args=(row,), daemon=True)
                             th.start()
@@ -745,13 +744,12 @@ class Astra():
 
                             # if last row, sleep until thread is finished to prevent from returning to start of schedule by watchdog
                             if i == self.schedule.index[-1]:
-                                while (th.is_alive() is True) and self.weather_safe and self.schedule_running and self.error_free and (self.interrupt is False):
+                                while (th.is_alive() is True) and ((self.weather_safe is True) or (row['action_type'] in ['calibration'])) and self.schedule_running and self.error_free and (self.interrupt is False):
                                     time.sleep(1)
                                 self.__log('info', f"Waiting for last schedule item to reach endtime of {row['end_time']}: {row['device_name']} {row['action_type']}")
-                                while self.weather_safe and self.schedule_running and self.error_free and (self.interrupt is False):
+                                while ((self.weather_safe is True) or (row['action_type'] in ['calibration'])) and self.schedule_running and self.error_free and (self.interrupt is False):
                                     t_until_end = (row['end_time'] - datetime.utcnow()).total_seconds()
                                     if t_until_end > 0:
-                                        print(t_until_end, 'seconds until last action expected to finish')
                                         time.sleep(1)
                                     else:
                                         break
