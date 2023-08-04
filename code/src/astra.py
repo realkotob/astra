@@ -87,6 +87,7 @@ class Astra():
         self.__log('info', 'Astra starting up')
 
         self.error_free = True
+        self.error_source = []
         self.weather_safe = None
 
         self.watchdog_running = False
@@ -100,7 +101,7 @@ class Astra():
         self.schedule = None
         self.schedule = self.read_schedule()
 
-        self.fits_config = pd.read_csv('../config/fits_headers.csv')
+        self.fits_config = pd.read_csv(f'../config/{self.observatory_name}_fits_headers.csv')
 
         self.devices = self.load_devices()
         self.last_image = None
@@ -183,7 +184,7 @@ class Astra():
 
     def read_config(self, config_filename : str):
         '''
-        Read the yaml file and create a dictionary of devices
+        Read the config yaml file and create a dictionary of observatory's setup.
         '''
 
         self.__log('info', 'Reading config file')
@@ -200,7 +201,7 @@ class Astra():
     
     def load_devices(self):
         '''
-        Read the yaml file and create a list of devices
+        Read observatory config and create a dictionary of devices
         '''
 
         self.__log('info', 'Loading devices')
@@ -322,154 +323,210 @@ class Astra():
             self.__log('info', 'Safety monitor found')
 
             device_type = 'SafetyMonitor'
-            device_name = self.observatory[device_type][0]['device_name']
+            sm_name = self.observatory[device_type][0]['device_name']
 
-            safety_monitor = self.devices[device_type][device_name]
+            safety_monitor = self.devices[device_type][sm_name]
 
             sm_poll = safety_monitor.poll_latest()
 
             if sm_poll['status'] != 'success':
-                self.__log('error', f"Error polling safety monitor {device_name}")
+                self.__log('error', f"Error polling safety monitor {sm_name}")
 
             t = datetime.utcnow()
 
-            while sm_poll['data']['IsSafe']['value'] is None:
+            while sm_poll['data']['IsSafe']['value'] is None and self.error_free:
 
                 sm_poll = safety_monitor.poll_latest()
 
                 if sm_poll['status'] != 'success':
-                    self.__log('error', f"Error polling safety monitor {device_name}")
+                    self.__log('error', f"Error polling safety monitor {sm_name}")
                     break
 
                 if (datetime.utcnow() - t).total_seconds() > 60:
-                    self.__log('error', f"Safety monitor {device_name} not responding")
+                    self.__log('error', f"Safety monitor {sm_name} not responding")
                     break
 
                 time.sleep(0.5)
 
-
+        # observatory safety flags
         telescope_parked = False
         dome_parked = False
         dome_shutter_closed = False
         
-        while self.watchdog_running and self.error_free:
-
-            # check if schedule file updated
-            schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
-
-            if schedule_mtime > self.schedule_mtime:
-                self.__log('warning', 'Schedule updated')
-                self.schedule = self.read_schedule()
-
-
-            # check telescope altitude
-            if 'Telescope' in self.observatory:
-                for device_name in self.devices['Telescope']:
-                    telescope = self.devices['Telescope'][device_name]
-                    telescope_index = [i for i, d in enumerate(self.observatory['Telescope']) if d['device_name'] == device_name][0]
-
-                    if 'alt_limit' in self.observatory['Telescope'][telescope_index]:
-                        alt_limit = self.observatory['Telescope'][telescope_index]['alt_limit']
-
-                        t_poll = telescope.poll_latest()
-
-                        if t_poll['status'] != 'success':
-                            self.__log('error', f"Error polling telescope {device_name}")
-                            break
-                            
-                        if t_poll['data']['Altitude']['value'] <= alt_limit:
-                            self.__log('warning', f"Telescope {device_name} altitude {t_poll['data']['Altitude']['value']} < {alt_limit}")
-
-                            try:
-                                # stop telescope slewing
-                                telescope.get('AbortSlew')['data']()
-                            except Exception as e:
-                                self.__log('error', f"Error stopping telescope {device_name} slewing: {str(e)}")
-
-                            try:
-                                # stop tracking
-                                telescope.set('Tracking', False)
-                            except Exception as e:
-                                self.__log('error', f"Error stopping telescope {device_name} tracking: {str(e)}")
-
-                            try:
-                                # stop guiding
-                                self.guider[device_name].running = False
-                            except Exception as e:
-                                self.__log('error', f"Error stopping telescope {device_name} guiding: {str(e)}")
-
-            
-            # check safety monitor
-            if 'SafetyMonitor' in self.observatory:
-                sm_poll = safety_monitor.poll_latest()
-
-                if sm_poll['status'] != 'success':
-                    self.__log('error', f"Error polling safety monitor {device_name}")
-                    break
+        while self.watchdog_running:
                 
-                last_update = (datetime.utcnow() - sm_poll['data']['IsSafe']['datetime']).total_seconds()
+            if self.error_free is True:
 
-                match last_update:
-                    case _ if last_update > 1.5 and last_update < 30:
-                        self.__log('warning', f"Safety monitor {last_update}s stale")
-                    case _ if last_update > 30:
-                        self.__log('error', f"Safety monitor {last_update}s stale")
-                        break
+                try:
+                    # check if schedule file updated
+                    schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
 
-                # TODO: poll also telescope altitude here, or separate thread?
-                # TODO: error handling!
+                    if schedule_mtime > self.schedule_mtime:
+                        self.__log('warning', 'Schedule updated')
+                        self.schedule = self.read_schedule()
                 
-                if sm_poll['data']['IsSafe']['value'] is False:
+                except Exception as e:
+                    self.error_source.append({'type': 'Schedule', 'device_name': 'schedule', 'error': str(e)})
+                    self.__log('error', f"Error checking schedule: {str(e)}")
 
-                    self.weather_safe = False
+                # check telescope(s) altitude
+                if 'Telescope' in self.observatory:
+                    for telescope_name in self.devices['Telescope']:
+                        telescope = self.devices['Telescope'][telescope_name]
+                        telescope_index = [i for i, d in enumerate(self.observatory['Telescope']) if d['device_name'] == telescope_name][0]
+
+                        if 'alt_limit' in self.observatory['Telescope'][telescope_index]:
+                            alt_limit = self.observatory['Telescope'][telescope_index]['alt_limit']
+
+                            t_poll = telescope.poll_latest()
+
+                            if t_poll['status'] != 'success':
+                                self.error_source.append({'type': 'Telescope', 'device_name': telescope_name, 'error': t_poll['error']})
+                                self.__log('error', f"Error polling telescope {telescope_name}")
+                                break # breaks for loop
+                                
+                            if t_poll['data']['Altitude']['value'] <= alt_limit:
+                                # TODO: BETTER LOGIC HERE NEEDED - CHECK IF SLEWING, GUIDING, TRACKING, ETC. before stopping
+                                self.__log('warning', f"Telescope {telescope_name} altitude {t_poll['data']['Altitude']['value']} < {alt_limit}")
+
+                                try:
+                                    # stop telescope slewing
+                                    telescope.get('AbortSlew')['data']()
+                                except Exception as e:
+                                    self.error_source.append({'type': 'Telescope', 'device_name': telescope_name, 'error': str(e)})
+                                    self.__log('error', f"Error stopping telescope {telescope_name} slewing: {str(e)}")
+
+                                try:
+                                    # stop tracking
+                                    telescope.set('Tracking', False)
+                                except Exception as e:
+                                    self.error_source.append({'type': 'Telescope', 'device_name': telescope_name, 'error': str(e)})
+                                    self.__log('error', f"Error stopping telescope {telescope_name} tracking: {str(e)}")
+
+                                try:
+                                    # stop guiding
+                                    self.guider[device_name].running = False
+                                except Exception as e:
+                                    self.error_source.append({'type': 'Guider', 'device_name': telescope_name, 'error': str(e)})
+                                    self.__log('error', f"Error stopping telescope {telescope_name} guiding: {str(e)}")
+                
+                # check safety monitor
+                if 'SafetyMonitor' in self.observatory:
+                    sm_poll = safety_monitor.poll_latest()
+
+                    if sm_poll['status'] != 'success':
+                        self.__log('error', f"Error polling safety monitor {sm_name}")
+                        self.error_source.append({'type': 'SafetyMonitor', 'device_name': sm_name, 'error': 'Error polling safety monitor'})
+                        break # breaks while loop
                     
-                    # shut dome procedure --> park telescope, close dome. Move to function? <- yes, needed for morning close
-                    # may want to close dome before park telescope?
-                    telescope_parked, dome_parked, dome_shutter_closed = self.close_observatory(telescope_parked, dome_parked, dome_shutter_closed)
+                    # check if stale
+                    last_update = (datetime.utcnow() - sm_poll['data']['IsSafe']['datetime']).total_seconds()
 
+                    match last_update:
+                        case _ if last_update > 1.5 and last_update < 30:
+                            self.__log('warning', f"Safety monitor {last_update}s stale")
+                        case _ if last_update > 30:
+                            self.__log('error', f"Safety monitor {last_update}s stale")
+                            self.error_source.append({'type': 'SafetyMonitor', 'device_name': sm_name, 'error': f"Stale data {last_update}s"})
+                            break # breaks while loop
+                    
                     # cleanup dead threads
                     for i in self.threads:
                         if i['thread'].is_alive() is False:
                             self.threads.remove(i)
 
-                    # TODO: if telescope fails, allow dome closing? <-- need to have config.
+                    if sm_poll['data']['IsSafe']['value'] is False:
+
+                        self.weather_safe = False
                         
-
-                else:
-                    self.weather_safe = True
-
-                    telescope_parked = False
-                    dome_parked = False
-                    dome_shutter_closed = False
-
-                if self.schedule_running is False:
-                    # TODO: Smarter logic
-                    # if past 30 mins have been consecutive safe, start schedule
-                    # if not, wait.
-
-                    # read db, check if last 30 mins have been safe
-
-                    if self.truncate_schedule is True:
-                        rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
-                    else:
-                        rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
-
-                    if self.schedule.iloc[-1]['end_time'] > datetime.utcnow():
-
-                        self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last 1 minutes")
-
-                        # start schedule
-                        if len(rows) == 0:
+                        # may want to close dome before park telescope?
+                        telescope_parked, dome_parked, dome_shutter_closed = self.close_observatory(telescope_parked, dome_parked, dome_shutter_closed)
                             
-                            if self.debug is False:
-                                self.schedule = self.read_schedule()
+                    else:
 
-                            self.schedule_running = True
-                            th = Thread(target=self.run_schedule, daemon = True)
-                            th.start()
-                            self.threads.append({'type': 'run_schedule', 'device_name': 'Schedule', 'thread': th, 'id' : -2})
+                        self.weather_safe = True
+                        
+                        # reset flags
+                        telescope_parked = False
+                        dome_parked = False
+                        dome_shutter_closed = False
+
+                    if self.schedule_running is False and self.error_free is True:
+                        # TODO: Smarter logic
+                        # if past 30 mins have been consecutive safe, start schedule
+                        # if not, wait.
+
+                        if self.truncate_schedule is True:
+                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
+                        else:
+                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
+
+                        if self.schedule.iloc[-1]['end_time'] > datetime.utcnow():
+
+                            self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last 1 minutes")
+
+                            # start schedule
+                            if len(rows) == 0:
+                                
+                                if self.truncate_schedule is False:
+                                    self.schedule = self.read_schedule()
+
+                                self.schedule_running = True
+                                th = Thread(target=self.run_schedule, daemon = True)
+                                th.start()
+                                self.threads.append({'type': 'run_schedule', 'device_name': 'Schedule', 'thread': th, 'id' : -2})
+
+            else:
+
+                # wait a bit to see if it's a multi-device error?
+                time.sleep(15)
+
+                # make pandas dataframe of error_source
+                df = pd.DataFrame(self.error_source)
+
+                device_types = df.type.unique()
+                device_names = df.device_name.unique()
+
+                if len(device_names) > 1:
+                    # multiple devices have errors
+                    self.__log('error', f"Multiple devices have errors: {device_names}. Panic.")
+                    # TODO: Panic mode
+                    break # breaks while loop
+                elif len(device_names) == 1:
+                    # only one device has errors
+                    match device_types[0]:
+                        case 'SafetyMonitor':
+                            pass
+                            # should close observatory if only that wrong.
+                        case 'Telescope':
+                            pass
+                        case 'Dome':
+                            pass
+                        case 'Guider':
+                            pass
+                        case 'Camera':
+                            pass
+                        case 'FilterWheel':
+                            pass
+                        case 'Focuser':
+                            pass
+                        case 'Rotator':
+                            pass
+                        case 'ObservingConditions':
+                            pass
+                        case 'CoverCalibrator':
+                            pass
+                        case 'Switch':
+                            pass
+                        case 'Schedule':
+                            pass
+                        case 'Queue':
+                            pass
+                        case _:
+                            pass
 
             time.sleep(0.5) # twice the safety monitor polling time
+
 
         self.watchdog_running = False
         self.__log('warning', 'Watchdog stopped')
@@ -485,33 +542,41 @@ class Astra():
             self.__log('warning', 'Weather unsafe')
             self.__log('info', 'Closing observatory')
 
-            if telescope_parked is False:
-                self.__log('warning', 'Parking telescope')
-            else:
-                self.__log('info', 'Telescope already parked')
+            if 'Telescope' in self.observatory:
+                if telescope_parked is False:
+                    self.__log('warning', 'Parking telescope')
+                else:
+                    self.__log('info', 'Telescope already parked')
 
-            #TODO: check if dome telescope exists
-            if dome_parked is False:
-                self.__log('warning', 'Closing dome')
-            else:
-                self.__log('info', 'Dome already closed')
+            if 'Dome' in self.observatory:
+                if dome_parked is False:
+                    self.__log('warning', 'Closing dome')
+                else:
+                    self.__log('info', 'Dome already closed')
 
-            if dome_shutter_closed is False:
-                self.__log('warning', 'Closing dome shutter')
-            else:
-                self.__log('info', 'Dome shutter already closed')
+                if dome_shutter_closed is False:
+                    self.__log('warning', 'Closing dome shutter')
+                else:
+                    self.__log('info', 'Dome shutter already closed')
 
         
-        # stop telescope traking
+        # stop telescope tracking
         if 'Telescope' in self.observatory:
-            for d in self.devices['Telescope']:
-                device = self.devices['Telescope'][d]
-                device.set('Tracking', False)
+            for device_name in self.devices['Telescope']:
+                telescope = self.devices['Telescope'][device_name]
+
+                r = telescope.set('Tracking', False)
+                
+                if r['status'] != 'success':
+                    self.__log('error', f"Error stopping telescope {device_name} tracking")
+                    self.error_source.append({'type': 'Telescope', 'device_name': device_name, 'error': "Error stopping telescope tracking"})
+                    return telescope_parked, dome_parked, dome_shutter_closed
 
         # stop telescope slewing
         r = self.monitor_run_action('Telescope', 'Slewing', False, 'AbortSlew')
         if r['status'] != 'success':
-            self.__log('error', 'Error stopping telescope slewing')
+            self.__log('error', 'Error stopping telescope(s) slewing')
+            self.error_source.append({'type': 'Telescope', 'device_name': '', 'error': 'Error stopping telescope(s) slewing'})
             return telescope_parked, dome_parked, dome_shutter_closed
         
         # park telescope
@@ -519,7 +584,8 @@ class Astra():
         if r['status'] == 'success':
             telescope_parked = r['data']
         else:
-            self.__log('error', 'Error parking telescope')
+            self.__log('error', 'Error parking telescope(s)')
+            self.error_source.append({'type': 'Telescope', 'device_name': '', 'error': 'Error parking telescope(s)'})
             return telescope_parked, dome_parked, dome_shutter_closed
 
         # park dome                    
@@ -527,7 +593,8 @@ class Astra():
         if r['status'] == 'success':
             dome_parked = r['data']
         else:
-            self.__log('error', 'Error parking dome')
+            self.__log('error', 'Error parking dome(s)')
+            self.error_source.append({'type': 'Dome', 'device_name': '', 'error': 'Error parking dome(s)'})
             return telescope_parked, dome_parked, dome_shutter_closed
 
         # close dome shutter
@@ -535,7 +602,8 @@ class Astra():
         if r['status'] == 'success':
             dome_shutter_closed = r['data']
         else:
-            self.__log('error', 'Error closing dome shutter')
+            self.__log('error', 'Error closing dome shutter(s)')
+            self.error_source.append({'type': 'Dome', 'device_name': '', 'error': 'Error closing dome shutter(s)'})
             return telescope_parked, dome_parked, dome_shutter_closed
 
         return telescope_parked, dome_parked, dome_shutter_closed
@@ -609,36 +677,43 @@ class Astra():
         '''
         # TODO: error handling, add schedule as string to log.db?
 
-        schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
+        try:
 
-        if (schedule_mtime > self.schedule_mtime) or (self.schedule is None):
+            schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
 
-            if self.schedule_running is True:
-                self.__log('warning', 'Schedule updating while previous schedule is running. This will not take effect until the new schedule is run.')
+            if (schedule_mtime > self.schedule_mtime) or (self.schedule is None):
 
-            self.__log('info', 'Reading schedule')
+                if self.schedule_running is True:
+                    self.__log('warning', 'Schedule updating while previous schedule is running. This will not take effect until the new schedule is run.')
 
-            schedule = pd.read_csv(f'../schedule/{self.observatory_name}.csv')
-            schedule['start_time'] =  pd.to_datetime(schedule.start_time)
-            schedule['end_time'] = pd.to_datetime(schedule.end_time)
+                self.__log('info', 'Reading schedule')
 
-            # sort by start_time
-            schedule = schedule.sort_values(by=['start_time'])
+                schedule = pd.read_csv(f'../schedule/{self.observatory_name}.csv')
+                schedule['start_time'] =  pd.to_datetime(schedule.start_time)
+                schedule['end_time'] = pd.to_datetime(schedule.end_time)
 
-            # for development
-            if self.truncate_schedule is True:
-                schedule = update_times(schedule, 100)
+                # sort by start_time
+                schedule = schedule.sort_values(by=['start_time'])
 
-            # make new column called repeatable, set to True, TODO: Make useable.
-            schedule['repeatable'] = True
+                # for development
+                if self.truncate_schedule is True:
+                    schedule = update_times(schedule, 100)
+
+                # make new column called repeatable, set to True, TODO: Make useable.
+                schedule['repeatable'] = True
+                
+                self.__log('info', 'Schedule read')
+
+                self.schedule_mtime = schedule_mtime
+
+                return schedule
+            else:
+                return self.schedule
             
-            self.__log('info', 'Schedule read')
-
-            self.schedule_mtime = schedule_mtime
-
-            return schedule
-        else:
-            return self.schedule
+        except Exception as e:
+            self.__log('error', f'Error reading schedule: {e}')
+            self.error_source.append({'type': 'Schedule', 'device_name': '', 'error': f'Error reading schedule: {e}'})
+            return None
 
     def run_schedule(self):
         '''
@@ -768,7 +843,7 @@ class Astra():
         paired_devices['Camera'] = row['device_name']
         
         # prepare observatory for sequence
-        self.prep_observatory(paired_devices, action_value)
+        self.move_telescope_filter(paired_devices, action_value)
 
         # write base header
         hdr = self.base_header(paired_devices, action_value)
@@ -780,12 +855,12 @@ class Astra():
 
         return action_value, folder, hdr, paired_devices
     
-    def prep_observatory(self, paired_devices, action_value, filter_list_index = 0):
+    def move_telescope_filter(self, paired_devices, action_value, filter_list_index = 0):
         '''
         Prepares the observatory for the sequence
         '''
 
-        self.__log('info', f"Running prep_observatory for {paired_devices} {action_value}")
+        self.__log('info', f"Running move_telescope_filter for {paired_devices} {action_value}")
 
         # unpark and slew to target
         if ('ra' in action_value) and ('dec' in action_value) and self.weather_safe and self.error_free and (self.interrupt is False):
@@ -860,7 +935,7 @@ class Astra():
                             raise ValueError(r)
 
         # set filter
-        if 'filter' in action_value and 'FilterWheel' in paired_devices:
+        if 'filter' in action_value and 'FilterWheel' in paired_devices and self.error_free and (self.interrupt is False):
 
             f = action_value['filter']
             if type(f) == list:
@@ -1075,7 +1150,7 @@ class Astra():
                                     raise ValueError(r)
                                 
                                 # re-slew to target
-                                self.prep_observatory(paired_devices, action_value)
+                                self.move_telescope_filter(paired_devices, action_value)
                     else:
                         pointing_complete = True
 
@@ -1128,7 +1203,7 @@ class Astra():
         # https://docs.pyobs.org/en/latest/api/utils/skyflats.html#pyobs.utils.skyflats.FlatFielder
         # https://github.com/pyobs/pyobs-core/blob/master/pyobs/utils/skyflats/pointing/static.py
 
-        # Replace the coordinates with the observer's actual location
+        self.__log('info', f"Running flats_sequence for {row['device_name']} {row['action_type']} {row['action_value']} {row['start_time']} {row['end_time']}")
 
         action_value, folder, hdr, paired_devices = self.pre_sequence(row)
 
@@ -1141,24 +1216,54 @@ class Astra():
         target_adu_max = target_adu[0] + target_adu[1]
         target_adu_min = target_adu[0] - target_adu[1]
 
-        # metadata
-        maxadu = camera.get('MaxADU')['data'] ## error handling
-        numx = camera.get('NumX')['data']
-        numy = camera.get('NumY')['data']
-        startx = camera.get('StartX')['data']
-        starty = camera.get('StartY')['data']
-        print(numx, numy, startx, starty)
+        # camera orignal framing
+        maxadu = camera.get('MaxADU')
+        if maxadu['status'] == "success":
+            maxadu = maxadu['data']
+        else:
+            raise ValueError(maxadu)
 
+        numx = camera.get('NumX')
+        if numx['status'] == "success":
+            numx = numx['data']
+        else:
+            raise ValueError(numx)
+        
+        numy = camera.get('NumY')
+        if numy['status'] == "success":
+            numy = numy['data']
+        else:
+            raise ValueError(numy)
+        
+        startx = camera.get('StartX')
+        if startx['status'] == "success":
+            startx = startx['data']
+        else:
+            raise ValueError(startx)
+        
+        starty = camera.get('StartY')
+        if starty['status'] == "success":
+            starty = starty['data']
+        else:
+            raise ValueError(starty)
+        
         # get location to determine if sun is up
         obs_lat = hdr['LAT-OBS']
         obs_lon = hdr['LONG-OBS']
         obs_alt = hdr['ALT-OBS']
-        print(obs_lat, obs_lon, obs_alt)
         obs_location = EarthLocation(lat=obs_lat*u.deg, lon=obs_lon*u.deg, height=obs_alt*u.m)
 
+        # check if ready to take flats
         take_flats = False
-        while take_flats is False:
+        while take_flats is False and self.error_free is True and self.interrupt is False and self.weather_safe is True:
             sun_rising, take_flats, sun_altaz = utils.is_sun_rising(obs_location)
+
+            if sun_altaz.alt.degree > 0:
+                # check dome closed
+                r = self.monitor_run_action('Dome', 'AtPark', True, 'Park')
+                if r['status'] != 'success':
+                    self.__log('error', 'Error parking dome')
+
             if take_flats is False:
                 time.sleep(60)
 
@@ -1168,8 +1273,16 @@ class Astra():
         altaz = SkyCoord(
             alt=75 * u.deg, az=sun_altaz.az + 180 * u.degree, obstime=Time.now(), location=obs_location, frame="altaz"
         )
-        telescope.set('Tracking', True)
-        telescope.get('SlewToAltAzAsync')['data'](Azimuth=altaz.az.deg, Altitude=altaz.alt.deg)
+        r = telescope.set('Tracking', True)
+        if r['status'] != 'success':
+            raise ValueError(r)
+        
+        r = telescope.get('SlewToAltAzAsync')
+        if r['status'] == 'success':
+            r['data'](Azimuth=altaz.az.deg, Altitude=altaz.alt.deg)
+        else:
+            raise ValueError(r)
+        
 
         # wait for telescope to reach position
         while telescope.get('Slewing')['data'] is True:
@@ -1180,7 +1293,7 @@ class Astra():
                     
         for i, filter_name in enumerate(action_value['filter']):
 
-            self.prep_observatory(paired_devices, action_value, filter_list_index = i) # sets filter/focus
+            self.move_telescope_filter(paired_devices, action_value, filter_list_index = i) # sets filter/focus
 
             # MOVE TO FUNCTION?
             # establishing exposure time
@@ -1576,12 +1689,14 @@ class Astra():
 
         while True:
             try:
-                r = self.queue.get()
+                metadata, r = self.queue.get()
                 
                 if r['type'] == 'query':
                     self.cursor.execute(r['data'])
                 elif r['type'] == 'log':
                     self.__log(r['data'][0], r['data'][1])
+                    if r['data'][0] == 'error':
+                        self.error_source.append(metadata)
 
             except Exception as e:
                 self.__log("error", f"Queue get error: {str(e)}")

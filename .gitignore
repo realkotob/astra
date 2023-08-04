@@ -3,6 +3,7 @@ temp
 
 # images
 *.fits
+code/src/frontend/*.jpg
 
 # DS_Store
 .DS_Store

@@ -44,6 +44,17 @@ Camera:
       ObservingConditions: weather_Callisto
       SafetyMonitor: safety_Callisto
       Dome: dome_Callisto
+  - device_name: camera_Callisto_2
+    ip: 10.211.55.3:11111
+    device_number: 1
+    target_adu: [45000, 3000]
+    paired_devices: 
+      Telescope: Callisto
+      Focuser: focuser_Callisto
+      FilterWheel: fw_Callisto
+      ObservingConditions: weather_Callisto
+      SafetyMonitor: safety_Callisto
+      Dome: dome_Callisto
 FilterWheel:
   - device_name: fw_Callisto
     ip: 10.211.55.3:11111 
