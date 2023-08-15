@@ -220,6 +220,7 @@ class Astra():
                                                                               self.debug)
                         devices[device_type][d['device_name']].start()
                     except Exception as e:
+                        self.error_source.append({'device_type': device_type, 'device_name': d['device_name'], 'error': str(e)})
                         self.__log('error', f"Error loading {device_type} {d['device_name']}: {str(e)}")
         
         self.__log('info', 'Devices loaded')
@@ -236,11 +237,13 @@ class Astra():
         # connect to all devices
         for device_type in self.devices:
             for device_name in self.devices[device_type]:
-                r = self.devices[device_type][device_name].set("Connected", True) ## slow?
-                if r['status'] == 'success':
-                    self.__log('info', f"{device_type} {device_name} connected")
-                else:
-                    self.__log('error', f"{device_type} {device_name} not connected")
+                try:
+                    r = self.devices[device_type][device_name].set("Connected", True) ## slow?
+                    if r['status'] == 'success':
+                        self.__log('info', f"{device_type} {device_name} connected")
+                except Exception as e:
+                    self.error_source.append({'device_type': device_type, 'device_name': device_name, 'error': str(e)})
+                    self.__log('error', f"Error connecting to {device_type} {device_name}: {str(e)}")
 
         self.__log('info', 'Starting polling non-fixed fits headers')
 
@@ -251,7 +254,11 @@ class Astra():
                 device_type = row['device_type']
                 for device_name in self.devices[device_type]:
                     device = self.devices[device_type][device_name]
-                    device.start_poll(row['device_command'], delay) # 5 second polling
+                    try:
+                        device.start_poll(row['device_command'], delay) # 5 second polling
+                    except Exception as e:
+                        self.error_source.append({'device_type': device_type, 'device_name': device_name, 'error': str(e)})
+                        self.__log('error', f"Error starting polling for {device_type} {device_name}: {str(e)}")
         
         delay = 1 # seconds
         if 'SafetyMonitor' in self.observatory:
@@ -259,14 +266,18 @@ class Astra():
             device_name = self.observatory[device_type][0]['device_name']
 
             device = self.devices[device_type][device_name]
-            device.start_poll('IsSafe', delay) # 1 second polling, could move to watchdog thread, but nice to have in db
-            
+            try:
+                device.start_poll('IsSafe', delay) # 1 second polling, could move to watchdog thread, but nice to have in db
+            except Exception as e:
+                self.error_source.append({'device_type': device_type, 'device_name': device_name, 'error': str(e)})
+                self.__log('error', f"Error starting polling for {device_type} {device_name}: {str(e)}")
+
         self.__log('info', 'Connect all sequence complete')
         # run can<> ascom commands, needed for other commands to work? Else, alternatives needed.
 
     def disconnect_all(self):
         '''
-        Stop polling and disconnect from all the devices
+        Stop polling and disconnect from all the devices, # TODO: consider renaming to unload_devices
         '''
         
         self.__log('info', 'Disconnecting from devices')
@@ -280,15 +291,18 @@ class Astra():
 
         for device_type in self.devices:
             for device_name in self.devices[device_type]:
-                self.devices[device_type][device_name].stop_poll()
-                r = self.devices[device_type][device_name].set("Connected", False) ## slow?
-                if r['status'] == 'success':
-                    self.__log('info', f"{device_type} {device_name} disconnected")
-                else:
-                    self.__log('error', f"{device_type} {device_name} not disconnected")
-                
-                self.devices[device_type][device_name].stop()
+                try:
+                    self.devices[device_type][device_name].stop_poll()
+                    
+                    r = self.devices[device_type][device_name].set("Connected", False) ## slow?
+                    if r['status'] == 'success':
+                        self.__log('info', f"{device_type} {device_name} disconnected")
 
+                    self.devices[device_type][device_name].stop() ## unloads device?
+                except Exception as e:
+                    self.error_source.append({'device_type': device_type, 'device_name': device_name, 'error': str(e)})
+                    self.__log('error', f"{device_type} {device_name} not disconnected: {str(e)}")
+                
         self.__log('info', 'Disconnect all sequence complete')
 
         self.cursor.close()
@@ -326,159 +340,143 @@ class Astra():
             sm_name = self.observatory[device_type][0]['device_name']
 
             safety_monitor = self.devices[device_type][sm_name]
-            
+
             try:
                 sm_poll = safety_monitor.poll_latest()
+
+                while sm_poll['data']['IsSafe']['value'] is None and self.error_free:
+                    sm_poll = safety_monitor.poll_latest()
+                    time.sleep(0.5)
             except Exception as e:
                 self.error_source.append({'type': 'SafetyMonitor', 'device_name': sm_name, 'error': str(e)})
-                self.__log('error', f"Error polling safety monitor: {str(e)}")
-
-            while sm_poll['data']['IsSafe']['value'] is None and self.error_free:
-
-                try:
-                    sm_poll = safety_monitor.poll_latest()
-                except Exception as e:
-                    self.error_source.append({'type': 'SafetyMonitor', 'device_name': sm_name, 'error': str(e)})
-                    self.__log('error', f"Error polling safety monitor: {str(e)}")
-
-                time.sleep(0.5)
+                self.__log('error', f"Error polling safety monitor {sm_name}: {str(e)}")
 
         # observatory closing message flag
         closing_messsage = True
         
         while self.watchdog_running:
-                
+
+            # check if any devices unresponsive, timeout needed?            
+            for device_type in self.devices:
+                for device_name in self.devices[device_type]:
+                    try:
+                        self.devices[device_type][device_name].poll_latest()
+                    except Exception as e:
+                        self.error_source.append({'type': device_type, 'device_name': device_name, 'error': str(e)})
+                        self.__log('error', f"Error polling {device_type} {device_name} during watchdog check: {str(e)}")
+
             if self.error_free is True:
-                                    
-                # cleanup dead threads
-                for i in self.threads:
-                    if i['thread'].is_alive() is False:
-                        self.threads.remove(i)
+                try:      
+                    # cleanup dead threads
+                    for i in self.threads:
+                        if i['thread'].is_alive() is False:
+                            self.threads.remove(i)
 
-                # check if schedule file updated
-                try:
-                    schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
+                    # check if schedule file updated
+                    try:
+                        schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
 
-                    if schedule_mtime > self.schedule_mtime:
-                        self.__log('warning', 'Schedule updated')
-                        self.schedule = self.read_schedule()
-                except Exception as e:
-                    self.error_source.append({'type': 'Schedule', 'device_name': 'schedule', 'error': str(e)})
-                    self.__log('error', f"Error checking schedule: {str(e)}")
+                        if schedule_mtime > self.schedule_mtime:
+                            self.__log('warning', 'Schedule updated')
+                            self.schedule = self.read_schedule()
+                    except Exception as e:
+                        self.error_source.append({'type': 'Schedule', 'device_name': 'schedule', 'error': str(e)})
+                        self.__log('error', f"Error checking schedule: {str(e)}")
+                        continue
 
-                # check telescope(s) altitude
-                if 'Telescope' in self.observatory:
-                    for telescope_name in self.devices['Telescope']:
-                        telescope = self.devices['Telescope'][telescope_name]
-                        telescope_index = [i for i, d in enumerate(self.observatory['Telescope']) if d['device_name'] == telescope_name][0]
+                    # check telescope(s) altitude
+                    if 'Telescope' in self.observatory:
+                        for telescope_name in self.devices['Telescope']:
+                            telescope = self.devices['Telescope'][telescope_name]
+                            telescope_index = [i for i, d in enumerate(self.observatory['Telescope']) if d['device_name'] == telescope_name][0]
 
-                        if 'alt_limit' in self.observatory['Telescope'][telescope_index]:
-                            alt_limit = self.observatory['Telescope'][telescope_index]['alt_limit']
+                            if 'alt_limit' in self.observatory['Telescope'][telescope_index]:
 
-                            try:
+                                alt_limit = self.observatory['Telescope'][telescope_index]['alt_limit']
+
                                 t_poll = telescope.poll_latest()
-                            except Exception as e:
-                                self.error_source.append({'type': 'Telescope', 'device_name': telescope_name, 'error': str(e)})
-                                self.__log('error', f"Error polling telescope: {str(e)}")
-                                
-                            if t_poll['data']['Altitude']['value'] <= alt_limit and self.error_free:
-                                # TODO: BETTER LOGIC HERE NEEDED - CHECK IF SLEWING, GUIDING, TRACKING, ETC. before stopping
-                                self.__log('warning', f"Telescope {telescope_name} altitude {t_poll['data']['Altitude']['value']} < {alt_limit}")
+                                if t_poll['data']['Altitude']['value'] <= alt_limit:
 
-                                try:
+                                    # TODO: BETTER LOGIC HERE NEEDED - CHECK IF SLEWING, GUIDING, TRACKING, ETC. before stopping
+                                    self.__log('warning', f"Telescope {telescope_name} altitude {t_poll['data']['Altitude']['value']} < {alt_limit}")
+
                                     # stop telescope slewing
                                     telescope.get('AbortSlew')['data']()
-                                except Exception as e:
-                                    self.error_source.append({'type': 'Telescope', 'device_name': telescope_name, 'error': str(e)})
-                                    self.__log('error', f"Error stopping telescope {telescope_name} slewing: {str(e)}")
 
-                                try:
                                     # stop tracking
                                     telescope.set('Tracking', False)
-                                except Exception as e:
-                                    self.error_source.append({'type': 'Telescope', 'device_name': telescope_name, 'error': str(e)})
-                                    self.__log('error', f"Error stopping telescope {telescope_name} tracking: {str(e)}")
 
-                                try:
                                     # stop guiding
-                                    self.guider[telescope_name].running = False
-                                except Exception as e:
-                                    self.error_source.append({'type': 'Guider', 'device_name': telescope_name, 'error': str(e)})
-                                    self.__log('error', f"Error stopping telescope {telescope_name} guiding: {str(e)}")
-                
-                # check safety monitor
-                if 'SafetyMonitor' in self.observatory:
+                                    try:
+                                        self.guider[telescope_name].running = False
+                                    except Exception as e:
+                                        self.error_source.append({'type': 'Guider', 'device_name': telescope_name, 'error': str(e)})
+                                        self.__log('error', f"Error stopping telescope {telescope_name} guiding: {str(e)}")
+                                        continue
+                                    
+                    
+                    # check safety monitor
+                    if 'SafetyMonitor' in self.observatory:
 
-                    try:
                         sm_poll = safety_monitor.poll_latest()
-                    except Exception as e:
-                        self.error_source.append({'type': 'SafetyMonitor', 'device_name': sm_name, 'error': str(e)})
-                        self.__log('error', f"Error polling safety monitor: {str(e)}")
-                    
-                    # check if stale
-                    last_update = (datetime.utcnow() - sm_poll['data']['IsSafe']['datetime']).total_seconds()
 
-                    match last_update:
-                        case _ if last_update > 3 and last_update < 30:
-                            self.__log('warning', f"Safety monitor {last_update}s stale")
-                        case _ if last_update > 30:
-                            self.__log('error', f"Safety monitor {last_update}s stale")
-                            self.error_source.append({'type': 'SafetyMonitor', 'device_name': sm_name, 'error': f"Stale data {last_update}s"})
-                            break # breaks while loop
-                    
+                        # check if stale
+                        last_update = (datetime.utcnow() - sm_poll['data']['IsSafe']['datetime']).total_seconds()
 
-                    if sm_poll['data']['IsSafe']['value'] is False:
-
-                        self.weather_safe = False
+                        match last_update:
+                            case _ if last_update > 3 and last_update < 30:
+                                self.__log('warning', f"Safety monitor {last_update}s stale")
+                            case _ if last_update > 30:
+                                self.__log('error', f"Safety monitor {last_update}s stale")
+                                self.error_source.append({'type': 'SafetyMonitor', 'device_name': sm_name, 'error': f"Stale data {last_update}s"})
                         
-                        if closing_messsage is True:
-                            self.__log('warning', 'Weather unsafe')
-                            self.__log('info', 'Closing observatory')
-                            closing_messsage = False
 
-                        # may want to close dome before park telescope?
-                        self.close_observatory() # checks if already closed and closes if not
+                        if sm_poll['data']['IsSafe']['value'] is False:
 
-                    else:
+                            self.weather_safe = False
+                            
+                            if closing_messsage is True:
+                                self.__log('warning', 'Weather unsafe')
+                                self.__log('info', 'Closing observatory')
+                                closing_messsage = False
 
-                        self.weather_safe = True
+                            # may want to close dome before park telescope?
+                            self.close_observatory() # checks if already closed and closes if not
 
-                    if self.schedule_running is False and self.error_free is True:
-                        # TODO: Smarter logic
-                        # if past 30 mins have been consecutive safe, start schedule
-                        # if not, wait.
-
-                        if self.truncate_schedule is True:
-                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
                         else:
-                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
 
-                        if self.schedule.iloc[-1]['end_time'] > datetime.utcnow():
+                            self.weather_safe = True
 
-                            self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last 1 minutes")
+                        if self.schedule_running is False and self.error_free is True:
+                            # TODO: Smarter logic
+                            # if past 30 mins have been consecutive safe, start schedule
+                            # if not, wait.
 
-                            # start schedule
-                            if len(rows) == 0:
-                                
-                                if self.truncate_schedule is False:
-                                    self.schedule = self.read_schedule()
+                            if self.truncate_schedule is True:
+                                rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
+                            else:
+                                rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
 
-                                self.schedule_running = True
-                                th = Thread(target=self.run_schedule, daemon = True)
-                                th.start()
-                                self.threads.append({'type': 'run_schedule', 'device_name': 'Schedule', 'thread': th, 'id' : -2})
+                            if self.schedule.iloc[-1]['end_time'] > datetime.utcnow():
 
-                                closing_messsage = True # reset closing message, but should be smarter than this.
+                                self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last 1 minutes")
 
-                # check if any devices unresponsive, timeout needed?            
-                for device_type in self.devices:
-                    for device_name in self.devices[device_type]:
-                        try:
-                            self.devices[device_type][device_name].poll_latest()
-                        except Exception as e:
-                            self.error_source.append({'type': device_type, 'device_name': device_name, 'error': str(e)})
-                            self.__log('error', f"Error polling {device_type} {device_name} during watchdog check: {str(e)}")
-            
+                                # start schedule
+                                if len(rows) == 0:
+                                    
+                                    if self.truncate_schedule is False:
+                                        self.schedule = self.read_schedule()
+
+                                    self.schedule_running = True
+                                    th = Thread(target=self.run_schedule, daemon = True)
+                                    th.start()
+                                    self.threads.append({'type': 'run_schedule', 'device_name': 'Schedule', 'thread': th, 'id' : -2})
+
+                                    closing_messsage = True # reset closing message, but should be smarter than this.
+
+                except Exception as e:
+                    self.__log('error', f"Error during watchdog check: {str(e)}")
+
             else:
 
                 # stop watchdog
@@ -529,6 +527,8 @@ class Astra():
                             self.close_observatory()
                         case 'Queue':
                             pass
+                        case 'Headers':
+                            pass
                         case _:
                             pass
 
@@ -538,7 +538,31 @@ class Astra():
         self.watchdog_running = False
         self.__log('warning', 'Watchdog stopped')
     
-    def close_observatory(self):
+    def open_observatory(self, paired_devices = None):
+            
+        if 'Dome' in self.observatory:
+            if self.weather_safe and self.error_free and (self.interrupt is False):
+                # open dome shutter
+                if paired_devices is not None:
+                    self.__log('info', f"Opening Dome shutter of {paired_devices['Dome']}")
+                    self.monitor_action('Dome', 'ShutterStatus', 0, 'OpenShutter', paired_devices['Dome'])
+                else:
+                    self.__log('info', "Opening Dome shutter(s)")
+                    self.monitor_action('Dome', 'ShutterStatus', 0, 'OpenShutter')
+
+        time.sleep(1) # just in case monitor action is slow in updating error_free
+
+        if 'Telescope' in self.observatory:
+            if self.weather_safe and self.error_free and (self.interrupt is False):
+                # unpark telescope
+                if paired_devices is not None:
+                    self.__log('info', f"Unparking Telescope {paired_devices['Telescope']}")
+                    self.monitor_action('Telescope', 'AtPark', False, 'Unpark', paired_devices['Telescope'])
+                else:
+                    self.__log('info', "Unparking Telescope(s)")
+                    self.monitor_action('Telescope', 'AtPark', False, 'Unpark')
+
+    def close_observatory(self, paired_devices = None):
         '''
         Close observatory, park telescope, close dome, close dome shutter
         '''
@@ -546,43 +570,72 @@ class Astra():
         if 'Telescope' in self.observatory:
 
             # stop telescope slewing
-            r = self.monitor_action('Telescope', 'Slewing', False, 'AbortSlew')
+            if paired_devices is not None:
+                self.__log('info', f"Stopping Telescope {paired_devices['Telescope']} slewing")
+                r = self.monitor_action('Telescope', 'Slewing', False, 'AbortSlew', paired_devices['Telescope'])
+            else:
+                self.__log('info', "Stopping Telescope slewing")
+                r = self.monitor_action('Telescope', 'Slewing', False, 'AbortSlew')
+            
             if r['status'] != 'success':
-                self.__log('error', 'Error stopping telescope(s) slewing')
-                self.error_source.append({'type': 'Telescope', 'device_name': '', 'error': 'Error stopping telescope(s) slewing'})
                 return False
             
             # stop telescope tracking
-            for device_name in self.devices['Telescope']:
-                telescope = self.devices['Telescope'][device_name]
+            if paired_devices is not None:
+                self.__log('info', f"Stopping Telescope {paired_devices['Telescope']} tracking")
+                telescope = self.devices['Telescope'][paired_devices['Telescope']]
 
                 try:
                     telescope.set('Tracking', False)
                 except Exception as e:
-                    self.__log('error', f"Error stopping telescope {device_name} tracking: {str(e)}")
-                    self.error_source.append({'type': 'Telescope', 'device_name': device_name, 'error': f"Error stopping telescope {device_name} tracking: {str(e)}"})
+                    self.__log('error', f"Error stopping telescope {paired_devices['Telescope']} tracking: {str(e)}")
+                    self.error_source.append({'type': 'Telescope', 'device_name': paired_devices['Telescope'], 'error': f"Error stopping telescope {paired_devices['Telescope']} tracking: {str(e)}"})
                     return False
+            else:
+                for device_name in self.devices['Telescope']:
+                    self.__log('info', f"Stopping Telescope {device_name} tracking")
+                    telescope = self.devices['Telescope'][device_name]
+
+                    try:
+                        telescope.set('Tracking', False)
+                    except Exception as e:
+                        self.__log('error', f"Error stopping telescope {device_name} tracking: {str(e)}")
+                        self.error_source.append({'type': 'Telescope', 'device_name': device_name, 'error': f"Error stopping telescope {device_name} tracking: {str(e)}"})
+                        return False
             
             # park telescope
-            r = self.monitor_action('Telescope', 'AtPark', True, 'Park')
+            if paired_devices is not None:
+                self.__log('info', f"Parking Telescope {paired_devices['Telescope']}")
+                r = self.monitor_action('Telescope', 'AtPark', True, 'Park', paired_devices['Telescope'])
+            else:
+                self.__log('info', "Parking Telescope(s)")
+                r = self.monitor_action('Telescope', 'AtPark', True, 'Park')
+
             if r['status'] != 'success':
-                self.__log('error', 'Error parking telescope(s)')
-                self.error_source.append({'type': 'Telescope', 'device_name': '', 'error': 'Error parking telescope(s)'})
                 return False
             
         if 'Dome' in self.observatory:
-            # park dome                
-            r = self.monitor_action('Dome', 'AtPark', True, 'Park')
+
+            # park dome
+            if paired_devices is not None:
+                self.__log('info', f"Parking Dome {paired_devices['Dome']}")
+                r = self.monitor_action('Dome', 'AtPark', True, 'Park', paired_devices['Dome'])
+            else:
+                self.__log('info', "Parking Dome(s)")
+                r = self.monitor_action('Dome', 'AtPark', True, 'Park')
+
             if r['status'] != 'success':
-                self.__log('error', 'Error parking dome(s)')
-                self.error_source.append({'type': 'Dome', 'device_name': '', 'error': 'Error parking dome(s)'})
                 return False
             
             # close dome shutter
-            r = self.monitor_action('Dome', 'ShutterStatus', 1, 'CloseShutter')
+            if paired_devices is not None:
+                self.__log('info', f"Closing Dome shutter of {paired_devices['Dome']}")
+                r = self.monitor_action('Dome', 'ShutterStatus', 1, 'CloseShutter', paired_devices['Dome'])
+            else:
+                self.__log('info', "Closing Dome shutter(s)")
+                r = self.monitor_action('Dome', 'ShutterStatus', 1, 'CloseShutter')
+
             if r['status'] != 'success':
-                self.__log('error', 'Error closing dome shutter(s)')
-                self.error_source.append({'type': 'Dome', 'device_name': '', 'error': 'Error closing dome shutter(s)'})
                 return False
 
         return True
@@ -705,10 +758,15 @@ class Astra():
         Run the schedule
         Interruptible by user and weather conditions
         '''
-
-        while self.weather_safe is None:
+        t0 = time.time()
+        while self.weather_safe is None and (time.time() - t0) < 120:
             self.__log('info', 'Waiting for safety conditions to be checked')
             time.sleep(1)
+        
+        if self.weather_safe is None:
+            self.__log('error', 'Weather safety check timed out')
+            self.error_source.append({'type': 'SafetyMonitor', 'device_name': '', 'error': 'Weather safety check timed out'})
+            return False
 
         self.__log('info', 'Running schedule')
         self.schedule_running = True
@@ -733,7 +791,7 @@ class Astra():
                         if row['start_time'] >= t:
                             time.sleep(1)
 
-                        elif (row['start_time'] <= t) and (row['end_time'] >= t): # and (row['repeatable'] is True)
+                        elif (row['start_time'] <= t) and (row['end_time'] >= t):
 
                             th = Thread(target=self.run_action, args=(row,), daemon=True)
                             th.start()
@@ -757,10 +815,10 @@ class Astra():
                             run_row = False
 
         # run headers completion
-        # self.__log('info', 'Completing headers')
-        # th = Thread(target=self.final_headers, daemon=True)
-        # th.start()
-        # self.threads.append({'type': 'final_headers', 'device_name': 'astra', 'thread': th, 'id' : -6})
+        self.__log('info', 'Completing headers')
+        th = Thread(target=self.final_headers, daemon=True)
+        th.start()
+        self.threads.append({'type': 'Headers', 'device_name': 'astra', 'thread': th, 'id' : "complete_headers"})
 
         self.schedule_running = False
         self.__log('warning', 'Schedule stopped')
@@ -785,19 +843,23 @@ class Astra():
 
                 if row['action_type'] in dir(device.device):
                     if isinstance(eval(row['action_value']), dict):
-                        r = device.get(row['action_type'])
-                        if r['status'] == "success":
-                            data = r['data'](**eval(row['action_value']))
-                            self.__log('info', f"Finished {row['device_name']} {row['action_type']} {row['action_value']} with {data}")
-                        else:
-                            raise ValueError(r)
+                        try:
+                            device.get(row['action_type'])['data'](**eval(row['action_value']))
+                            self.__log('info', f"Finished {row['device_name']} {row['action_type']} {row['action_value']}")
+                        except Exception as e:
+                            self.schedule_running = False
+                            self.__log('error', f"Error {row['device_name']} {row['action_type']} {row['action_value']}: {str(e)}")
+                            self.error_source.append({'type': row['device_type'], 'device_name': row['device_name'], 'error': f"Error {row['device_name']} {row['action_type']} {row['action_value']} with: {str(e)}"})
+ 
                     else:
-                        r = device.set(row['action_type'], row['action_value'])
-                        if r['status'] == "success":
-                            data = r['data']
-                            self.__log('info', f"Finished {row['device_name']} {row['action_type']} {row['action_value']} with {data}")
-                        else:
-                            raise ValueError(r)
+                        try:
+                            device.set(row['action_type'], row['action_value'])['data']
+                            self.__log('info', f"Finished {row['device_name']} {row['action_type']} {row['action_value']}")
+                        except Exception as e:
+                            self.schedule_running = False
+                            self.__log('error', f"Error {row['device_name']} {row['action_type']} {row['action_value']}: {str(e)}")
+                            self.error_source.append({'type': row['device_type'], 'device_name': row['device_name'], 'error': f"Error {row['device_name']} {row['action_type']} {row['action_value']} with: {str(e)}"})
+                        
                 else:
                     raise ValueError(f"Invalid action_type: {row['device_name']} {row['action_type']} with {row['action_value']} is not a valid method or property for {row['device_type']} {row['device_name']}")
         except Exception as e:
@@ -811,10 +873,10 @@ class Astra():
 
         self.__log('info', f"Running pre_sequence for {row['device_name']} {row['action_type']} {row['action_value']}")
         
-        action_value = eval(row['action_value'])
+        action_value = eval(row['action_value']) # TODO: put part of schedule check
         folder = utils.create_image_dir()
 
-        cam_index = [i for i, d in enumerate(self.observatory['Camera']) if d['device_name'] == row['device_name']][0]
+        cam_index = [i for i, d in enumerate(self.observatory['Camera']) if d['device_name'] == row['device_name']][0] # TODO: put part of schedule check
         paired_devices = self.observatory['Camera'][cam_index]['paired_devices']
         paired_devices['Camera'] = row['device_name']
         
@@ -840,61 +902,45 @@ class Astra():
 
         # unpark and slew to target
         if ('ra' in action_value) and ('dec' in action_value) and self.weather_safe and self.error_free and (self.interrupt is False):
-            if 'Dome' in paired_devices:
-                dome = self.devices['Dome'][paired_devices['Dome']]
-
-                # setting dome to slave - need to be part of config?
-                self.__log('info', f"Setting Dome {paired_devices['Dome']} to slave.")
-                r = dome.set('Slaved', True)
-                if r['status'] != "success":
-                    self.__log('warning', f"Error setting Dome {paired_devices['Dome']} to slave.")
-                    # TODO: need to move dome manually???
-
-                if self.weather_safe and self.error_free and (self.interrupt is False):
-                    # check dome open
-                    self.__log('info', f"Checking Dome {paired_devices['Dome']} is open.")
-                    r = self.monitor_action('Dome', 'ShutterStatus', 0, 'OpenShutter')
-                    if r['status'] != 'success':
-                        raise ValueError(r)
+            
+            self.open_observatory(paired_devices)
 
             if 'Telescope' in paired_devices:
                 telescope = self.devices['Telescope'][paired_devices['Telescope']]
 
                 if self.weather_safe and self.error_free and (self.interrupt is False):
-                    # unpark telescope
-                    self.__log('info', f"Unparking Telescope {paired_devices['Telescope']}")
-                    r = telescope.get('Unpark')
-
-                    if r['status'] == "success":
-                        r['data']()
-                    else:
-                        raise ValueError(r)
                 
                     # set tracking to true
                     self.__log('info', f"Setting Telescope {paired_devices['Telescope']} tracking to True")
-                    r = telescope.set('Tracking', True)
-
-                    if r['status'] != "success":
-                        raise ValueError(r)
+                    
+                    try:
+                        telescope.set('Tracking', True)
+                    except Exception as e:
+                        self.error_source.append({'type': 'Telescope', 'device_name': paired_devices['Telescope'], 'error': f"Error setting Telescope {paired_devices['Telescope']} tracking to True: {str(e)}"})
+                        self.__log('warning', f"Error setting Telescope {paired_devices['Telescope']} tracking to True: {str(e)}")
+                        return
 
                     # slew to target
                     self.__log('info', f"Slewing Telescope {paired_devices['Telescope']} to {action_value['ra']} {action_value['dec']}")
-                    r = telescope.get('SlewToCoordinatesAsync')
 
-                    if r['status'] == "success":
-                        r['data'](RightAscension = 24*action_value['ra']/360, Declination = action_value['dec'])
-                    else:
-                        raise ValueError(r)
+                    try:
+                        telescope.get('SlewToCoordinatesAsync')(RightAscension = 24*action_value['ra']/360, Declination = action_value['dec'])
+                    except Exception as e:
+                        self.error_source.append({'type': 'Telescope', 'device_name': paired_devices['Telescope'], 'error': f"Error slewing Telescope {paired_devices['Telescope']} to {action_value['ra']} {action_value['dec']}: {str(e)}"})
+                        self.__log('warning', f"Error slewing Telescope {paired_devices['Telescope']} to {action_value['ra']} {action_value['dec']}: {str(e)}")
+                        return
 
                     # wait for slew to finish
                     self.__log('info', f"Waiting for Telescope {paired_devices['Telescope']} to finish slewing")
                     start_time = time.time()
+                    
+                    try:
+                        slewing = telescope.get('Slewing')['data']
+                    except Exception as e:
+                        self.error_source.append({'type': 'Telescope', 'device_name': paired_devices['Telescope'], 'error': f"Error getting Telescope {paired_devices['Telescope']} slewing status: {str(e)}"})
+                        self.__log('warning', f"Error getting Telescope {paired_devices['Telescope']} slewing status: {str(e)}")
+                        return
 
-                    r = telescope.get('Slewing')
-                    if r['status'] == "success":
-                        slewing = r['data']
-                    else:
-                        raise ValueError(r)
 
                     while slewing is True and self.weather_safe and self.error_free and (self.interrupt is False) and self.schedule_running and self.watchdog_running:
                         self.__log('info', f"Telescope {paired_devices['Telescope']} slewing...")
@@ -904,11 +950,12 @@ class Astra():
 
                         time.sleep(1)
 
-                        r = telescope.get('Slewing')
-                        if r['status'] == "success":
-                            slewing = r['data']
-                        else:
-                            raise ValueError(r)
+                        try:
+                            slewing = telescope.get('Slewing')['data']
+                        except Exception as e:
+                            self.error_source.append({'type': 'Telescope', 'device_name': paired_devices['Telescope'], 'error': f"Error getting Telescope {paired_devices['Telescope']} slewing status: {str(e)}"})
+                            self.__log('warning', f"Error getting Telescope {paired_devices['Telescope']} slewing status: {str(e)}")
+                            return
 
         # set filter
         if 'filter' in action_value and 'FilterWheel' in paired_devices and self.error_free and (self.interrupt is False):
@@ -1615,17 +1662,26 @@ class Astra():
         
         self.__log('info', 'Completing headers... Done.')
 
-    def monitor_action(self, device_type : str, monitor_command : str, desired_condition : any, run_command : str, timeout : float = 120):
+    def monitor_action(self, device_type : str, monitor_command : str, desired_condition : any, run_command : str, device_name : str = '', timeout : float = 120):
         '''
-        Monitor all devices for a given monitor_command and run_command if desired_condition is not met.
+        Monitor device(s) of device_type for a given monitor_command and run_command if desired_condition is not met.
         '''
+        # TODO: improve logging
         try:
             start_time = time.time()
 
             if device_type in self.observatory:
                 monitor_status = []
-                for d in self.devices[device_type]:
-                    device = self.devices[device_type][d]
+                if device_name != '':
+                    for d in self.devices[device_type]:
+                        device = self.devices[device_type][d]
+                        status = device.get(monitor_command)['data']
+                        monitor_status.append(status)
+
+                        if status != desired_condition:
+                            device.get(run_command)['data']()
+                else:
+                    device = self.devices[device_type][device_name]
                     status = device.get(monitor_command)['data']
                     monitor_status.append(status)
 
@@ -1638,8 +1694,13 @@ class Astra():
                     self.__log("info", f"Monitor run action: {device_type} {monitor_command} {desired_condition} {run_command} {all_monitor_status}")
                     while all_monitor_status != desired_condition:
                         monitor_status = []
-                        for d in self.devices[device_type]:
-                            device = self.devices[device_type][d]
+                        if device_name != '':
+                            for d in self.devices[device_type]:
+                                device = self.devices[device_type][d]
+                                status = device.get(monitor_command)['data']
+                                monitor_status.append(status)
+                        else:
+                            device = self.devices[device_type][device_name]
                             status = device.get(monitor_command)['data']
                             monitor_status.append(status)
 
