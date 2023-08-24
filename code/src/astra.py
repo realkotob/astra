@@ -859,7 +859,7 @@ class Astra():
             if 'object' == row['action_type']:
                 self.object_sequence(row, paired_devices)
             elif 'calibration' == row['action_type']:
-                self.calibration_sequence(row)
+                self.calibration_sequence(row, paired_devices)
             elif 'flats' == row['action_type']:
                 self.flats_sequence(row, paired_devices)
             elif 'open' == row['action_type']:
@@ -1082,14 +1082,14 @@ class Astra():
         
         return True
         
-    def calibration_sequence(self, row):
+    def calibration_sequence(self, row, paired_devices):
         '''
         Bias, darks
         '''
 
         self.__log('info', f"Running calibration sequence for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
-        action_value, folder, hdr = self.pre_sequence(row)
+        action_value, folder, hdr = self.pre_sequence(row, paired_devices)
         
         camera = self.devices[row['device_type']][row['device_name']]
 
@@ -1196,7 +1196,7 @@ class Astra():
         '''
         self.__log('info', f"Running object sequence for {eval(row['action_value'])['object']} with {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
-        action_value, folder, hdr = self.pre_sequence(row)
+        action_value, folder, hdr = self.pre_sequence(row, paired_devices)
 
         hdr['EXPTIME'] = action_value['exptime']
         camera = self.devices[row['device_type']][row['device_name']]
@@ -1352,8 +1352,6 @@ class Astra():
     def flats_sequence(self, row, paired_devices):
         '''
         Flat sequence
-
-        TODO: To be finished...
         '''
         # https://arxiv.org/pdf/1407.8283.pdf
         # https://iopscience.iop.org/article/10.1086/133817/pdf?casa_token=ogWaY-ZHTqYAAAAA:XvO7oL5ZGqnsCIRyF3zqQJJeLWpuxmnHiBU7ubMuGL5ipJhYXey6fix4HoTbOcYTFta6CnDqYQ
@@ -1362,14 +1360,17 @@ class Astra():
 
         self.__log('info', f"Running flats sequence for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
-        action_value, folder, hdr = self.pre_sequence(row)
+        action_value, folder, hdr = self.pre_sequence(row, paired_devices)
 
         # camera device (first filter set in pre_sequence)
         camera = self.devices[row['device_type']][row['device_name']]
 
         # target adu for flats
         cam_index = [i for i, d in enumerate(self.observatory['Camera']) if d['device_name'] == row['device_name']][0]
-        target_adu = self.observatory['Camera'][cam_index]['target_adu']
+        target_adu = self.observatory['Camera'][cam_index]['flats']['target_adu']
+        offset = self.observatory['Camera'][cam_index]['flats']['bias_offset']
+        lower_exptime_limit = self.observatory['Camera'][cam_index]['flats']['lower_exptime_limit']
+        upper_exptime_limit = self.observatory['Camera'][cam_index]['flats']['upper_exptime_limit']
 
 
         try:
@@ -1448,13 +1449,18 @@ class Astra():
                     return
 
                 # move telescope to flat position
-                r = self.move_to_flat_position(obs_location, paired_devices)
+                r = self.move_to_flat_position(obs_location, paired_devices, row)
 
                 if r is False:
                     return
                 
                 # establishing initial exposure time
-                exptime, offset = self.set_flats_exposure_time(paired_devices, numx, numy, startx, starty, target_adu)
+                exptime = self.set_flats_exposure_time(paired_devices, row, numx, numy, startx, starty, target_adu, offset,
+                                                        lower_exptime_limit, upper_exptime_limit)
+                
+                if exptime < lower_exptime_limit or exptime > upper_exptime_limit:
+                    self.__log('info', "Moving on...")
+                    break
 
                 hdr['EXPTIME'] = exptime
                 hdr['IMGTYPE'] = 'Flat'
@@ -1510,26 +1516,37 @@ class Astra():
                             self.__log('debug', f"Saving image from {row['device_name']}")
                             filename = self.save_image(camera, hdr, dateobs, t0, maxadu, folder)
 
-                            # check median ADU of image
-                            with fits.open(filename) as hdul:
-                                data = hdul[0].data
-                                median_adu = np.nanmedian(data)
-                                fraction = (median_adu - offset) / (target_adu[0] - offset)
-
-                                if math.isclose(target_adu[0], median_adu, rel_tol=0, abs_tol=target_adu[1]) is False:
-                                    exptime = exptime * fraction
-                                    hdr['EXPTIME'] = exptime
-
 
                             # if time passes 30s, move telescope
                             if (datetime.utcnow() - t_last_move).total_seconds() >= 30:
                                 # move telescope to flat position
                                 r = self.move_to_flat_position(obs_location, paired_devices)
 
-                                t_last_move = datetime.utcnow()
-
                                 if r is False:
                                     return
+                                
+                                # get new exposure time since moved
+                                exptime = self.set_flats_exposure_time(paired_devices, numx, numy, startx, starty, target_adu, offset,
+                                                                        lower_exptime_limit, upper_exptime_limit, exposure_time=exptime)
+                                t_last_move = datetime.utcnow()
+
+                            else:
+                                # check median ADU of image
+                                with fits.open(filename) as hdul:
+                                    data = hdul[0].data
+                                    median_adu = np.nanmedian(data)
+                                    fraction = (median_adu - offset) / (target_adu[0] - offset)
+
+                                    if math.isclose(target_adu[0], median_adu, rel_tol=0, abs_tol=target_adu[1]) is False:
+                                        exptime = exptime * fraction
+
+                                        if exptime < lower_exptime_limit or exptime > upper_exptime_limit:
+                                            self.__log('warning', f"Exposure time of {exptime} s out of user defined range of {lower_exptime_limit} s to {upper_exptime_limit} s")
+                                            break
+                                        else:
+                                            self.__log('info', f"Setting new exposure time to {exptime} s as median ADU of {median_adu} is not within {target_adu[1]} of {target_adu[0]}")
+
+                                        hdr['EXPTIME'] = exptime
 
                             count += 1
 
@@ -1554,13 +1571,13 @@ class Astra():
 
         self.__log('info', f"Flat sequence ended for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
-
-    def move_to_flat_position(self, obs_location, paired_devices):
+    def move_to_flat_position(self, obs_location, paired_devices, row):
 
         if 'Telescope' in paired_devices:
             # check if ready to take flats
             take_flats = False
-            while (take_flats is False) and self.error_free and (self.interrupt is False) \
+            while (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) \
+                    and (take_flats is False) and self.error_free and (self.interrupt is False) \
                     and self.weather_safe and self.schedule_running and self.watchdog_running:
                 
                 sun_rising, take_flats, sun_altaz = utils.is_sun_rising(obs_location)
@@ -1607,7 +1624,8 @@ class Astra():
         else:
             return False
 
-    def set_flats_exposure_time(self, paired_devices, numx, numy, startx, starty, target_adu, exposure_time=1):
+    def set_flats_exposure_time(self, paired_devices, row, numx, numy, startx, starty, target_adu, offset, 
+                                lower_exptime_limit, upper_exptime_limit, exposure_time = None):
         '''
         Check if exposure time is correct for flats
         '''
@@ -1629,41 +1647,8 @@ class Astra():
                                 device_name = paired_devices['Camera'],
                                 log_message = f"Setting Camera {paired_devices['Camera']} StartY to {int(numy/2 - 32)}")
             
-            # get bias level
-            try:
-                r = camera.get('StartExposure')
-                if r['status'] != 'success':
-                    raise ValueError(r['message'])
-                else:
-                    self.__log('info', f"Exposing {paired_devices['Camera']} for exposure time {0} s")
-                    r['data'](Duration = 0, Light = False)
-            except Exception as e:
-                self.error_source.append({'type': 'Camera', 'device_name': paired_devices['Camera'], 'error': str(e)})
-                self.__log('error', f"Error starting exposure on {paired_devices['Camera']}: {str(e)}")
-                return
-
-            offset = 0
-            while self.error_free and (self.interrupt is False) \
-                    and self.weather_safe and self.schedule_running and self.watchdog_running:
-                
-                try:
-                    r = camera.get('ImageReady')
-                except Exception as e:
-                    self.error_source.append({'type': 'Camera', 'device_name': paired_devices['Camera'], 'error': str(e)})
-                    self.__log('error', f"Error checking ImageReady {paired_devices['Camera']}: {str(e)}")
-                    continue
-                
-                time.sleep(0) # yield to other threads
-                if r['status'] == "success":
-                    if r['data'] is True:
-                        r = camera.get('ImageArray')
-                        
-                        offset = np.nanmedian(r['data'])
-
-                        break
-   
-                else:
-                    raise ValueError(r)
+            if exposure_time is None:
+                exposure_time = (lower_exptime_limit + upper_exptime_limit) / 2
 
             try:
                 r = camera.get('StartExposure')
@@ -1678,7 +1663,8 @@ class Astra():
                 return
             
             getting_exposure_time = True
-            while getting_exposure_time and self.error_free and (self.interrupt is False) \
+            while (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) \
+                    and getting_exposure_time and self.error_free and (self.interrupt is False) \
                     and self.weather_safe and self.schedule_running and self.watchdog_running:
                 
                 try:
@@ -1706,17 +1692,21 @@ class Astra():
 
                         if math.isclose(target_adu[0], median_adu, rel_tol=0, abs_tol=target_adu[1]) is False:
                             exposure_time = exposure_time * fraction
-                            try:
-                                r = camera.get('StartExposure')
-                                if r['status'] != 'success':
-                                    raise ValueError(r['message'])
-                                else:
-                                    self.__log('info', f"Exposing {paired_devices['Camera']} for exposure time {exposure_time} s")
-                                    r['data'](Duration = exposure_time, Light = True)
-                            except Exception as e:
-                                self.error_source.append({'type': 'Camera', 'device_name': paired_devices['Camera'], 'error': str(e)})
-                                self.__log('error', f"Error starting exposure on {paired_devices['Camera']}: {str(e)}")
-                                return
+                            if exposure_time < lower_exptime_limit or exposure_time > upper_exptime_limit:
+                                self.__log('warning', f"Exposure time of {exposure_time} s out of user defined range of {lower_exptime_limit} s to {upper_exptime_limit} s")
+                                getting_exposure_time = False
+                            else:
+                                try:
+                                    r = camera.get('StartExposure')
+                                    if r['status'] != 'success':
+                                        raise ValueError(r['message'])
+                                    else:
+                                        self.__log('info', f"Exposing {paired_devices['Camera']} for exposure time {exposure_time} s")
+                                        r['data'](Duration = exposure_time, Light = True)
+                                except Exception as e:
+                                    self.error_source.append({'type': 'Camera', 'device_name': paired_devices['Camera'], 'error': str(e)})
+                                    self.__log('error', f"Error starting exposure on {paired_devices['Camera']}: {str(e)}")
+                                    return
                         else:
                             getting_exposure_time = False
                 else:
@@ -1736,7 +1726,7 @@ class Astra():
                                 device_name = paired_devices['Camera'],
                                 log_message = f"Setting Camera {paired_devices['Camera']} StartY to {starty}")
             
-            return exposure_time, offset
+            return exposure_time
             
 
     def img_transform(self, device, img, maxadu : int):
