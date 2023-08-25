@@ -1,4 +1,3 @@
-import logging
 import time
 from datetime import datetime
 
@@ -16,8 +15,6 @@ from alpaca.safetymonitor import *
 from alpaca.switch import *
 from alpaca.telescope import *
 from alpaca.exceptions import *
-
-from sqlite3worker import Sqlite3Worker
 
 import os
 
@@ -47,7 +44,7 @@ class AlpacaDevice(Process):
         self._poll_list = []
         self._poll_latest = {}
 
-        self.queue.put(self.metadata, {"type" : "log", "data" : ("info", f'{device_type} {device_name} loaded')})
+        self.queue.put((self.metadata, {"type" : "log", "data" : ("info", f'{device_type} {device_name} loaded')}))
 
     ## FRONTEND METHODS
 
@@ -150,17 +147,17 @@ class AlpacaDevice(Process):
             # permit 3 attempts
             data = None
             if self.debug:
-                self.queue.put(self.metadata, {"type" : "log", "data" : ("debug", f'Getting method: {self.device_type}, {self.device_name}, {method}')})
+                self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Getting method: {self.device_type}, {self.device_name}, {method}')}))
 
             for i in range(2):
                 try:
                     if data is None:
                         data = getattr(self.device, method)
                         if self.debug:
-                            self.queue.put(self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method}')})
+                            self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method}')}))
                 except Exception as e:
                     time.sleep(0)
-                    self.queue.put(self.metadata, {"type" : "log", "data" : ("warning", f'Get method failed with data {str(data)}: {self.device_type}, {self.device_name}, {method}, {str(e)}, trying again...')})
+                    self.queue.put((self.metadata, {"type" : "log", "data" : ("warning", f'Get method failed with data {str(data)}: {self.device_type}, {self.device_name}, {method}, {str(e)}, trying again...')}))
                     time.sleep(1)
                     continue
                 time.sleep(0)
@@ -168,17 +165,17 @@ class AlpacaDevice(Process):
             if data is None:
                 data = getattr(self.device, method)
                 if self.debug:
-                    self.queue.put(self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method}')})
+                    self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method}')}))
 
             time.sleep(0)
 
             if pipe:
-                self.back_pipe.send({"status" : "success", "data" : data, "message" : ""}) # check if valid, need args?
+                self.back_pipe.send(data) # check if valid, need args?
             else:
-                return data
+                return {"status" : "success", "data" : data, "message" : ""}
         except Exception as e:
             if pipe:
-                self.queue.put(self.metadata, {"type" : "log", "data" : ('error', f'Get method error with data {str(data)}: {self.device_type}, {self.device_name}, {method}, {str(e)}')})
+                self.queue.put((self.metadata, {"type" : "log", "data" : ('error', f'Get method error with data {str(data)}: {self.device_type}, {self.device_name}, {method}, {str(e)}')}))
                 self.back_pipe.send(e)
             else:
                 return {"status" : "error", "data" : "null", "message" : f"Get method error: {str(e)}"}
@@ -189,7 +186,7 @@ class AlpacaDevice(Process):
             data = setattr(self.device, method, value)
             self.back_pipe.send(data) # check if valid, need args?
         except Exception as e:
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('error', f'Set method error: {self.device_type}, {self.device_name}, {method}, {str(e)}')})
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('error', f'Set method error: {self.device_type}, {self.device_name}, {method}, {str(e)}')}))
             self.back_pipe.send(e) # check if valid, need args?
 
     def loop__(self, method, delay):
@@ -216,7 +213,7 @@ class AlpacaDevice(Process):
                 dt = datetime.utcnow()
                 dt_str = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
 
-                self.queue.put(self.metadata, {"type" : "query", "data" : f"INSERT INTO polling VALUES ('{self.device_type}', '{self.device_name}',  '{method}', '{val}', '{dt_str}')"})
+                self.queue.put((self.metadata, {"type" : "query", "data" : f"INSERT INTO polling VALUES ('{self.device_type}', '{self.device_name}',  '{method}', '{val}', '{dt_str}')"}))
                 
                 self._poll_latest[method]["value"] = val
                 self._poll_latest[method]["datetime"] = dt
@@ -226,35 +223,35 @@ class AlpacaDevice(Process):
             dt = datetime.utcnow()
             self._poll_latest[method]["datetime"] = dt
             self._poll_latest[method]["value"] = "null"
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('error', f'Loop error: {self.device_type}, {self.device_name}, {method}, {str(e)}')})
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('error', f'Loop error: {self.device_type}, {self.device_name}, {method}, {str(e)}')}))
         
     def start_poll__(self, method, delay):
         if method not in self._poll_list:
             Thread(target=self.loop__, args=(method, delay), daemon=True).start()
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('info', f'{self.device_type}, {self.device_name}, {method} poll started with {delay} second cadence')})
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('info', f'{self.device_type}, {self.device_name}, {method} poll started with {delay} second cadence')}))
     
     def stop_poll__(self, method=None):
         if method is None:
             self._poll_list = []
             self._poll_latest = {}
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('info', f'{self.device_type}, {self.device_name}, all polls stopped')})
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('info', f'{self.device_type}, {self.device_name}, all polls stopped')}))
         elif method in self._poll_list:
             self._poll_list = list(filter((method).__ne__, self._poll_list))
             del self._poll_latest[method]
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('info', f'{self.device_type}, {self.device_name}, {method} poll stopped. {self._poll_list} left in poll list, and {self._poll_latest} left in poll dict')})       
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('info', f'{self.device_type}, {self.device_name}, {method} poll stopped. {self._poll_list} left in poll list, and {self._poll_latest} left in poll dict')}))       
         else:
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('warning', f'Stop poll error: {self.device_type}, {self.device_name}, {method} not in poll list.')})
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('warning', f'Stop poll error: {self.device_type}, {self.device_name}, {method} not in poll list.')}))
 
     def poll_list__(self):
         try:
             self.back_pipe.send(self._poll_list)
         except Exception as e:    
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('error', f'poll_list error: {self.device_type}, {self.device_name}, {str(e)}')})
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('error', f'poll_list error: {self.device_type}, {self.device_name}, {str(e)}')}))
             self.back_pipe.send(e)
 
     def poll_latest__(self):
         try:
             self.back_pipe.send(self._poll_latest)
         except Exception as e:
-            self.queue.put(self.metadata, {"type" : "log", "data" : ('error', f'poll_latest error: {self.device_type}, {self.device_name}, {str(e)}')})
+            self.queue.put((self.metadata, {"type" : "log", "data" : ('error', f'poll_latest error: {self.device_type}, {self.device_name}, {str(e)}')}))
             self.back_pipe.send(e)

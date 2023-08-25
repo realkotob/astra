@@ -368,10 +368,10 @@ class Guider():
         None
         """
 
-        connected = self.telescope.get('Connected')['data']
+        connected = self.telescope.get('Connected')
         if connected:
             # get telescope declination to scale RA corrections
-            dec = self.telescope.get('Declination')['data']
+            dec = self.telescope.get('Declination')
             dec_rads = radians(dec)
             cos_dec = cos(dec_rads)
             # pop the earliest buffer value if > 30 measurements
@@ -428,31 +428,31 @@ class Guider():
                 guide_time_y = pidy * self.PIX2TIME['+y']
                 if self.RA_AXIS == 'y':
                     guide_time_y = guide_time_y/cos_dec
-                self.telescope.get('PulseGuide')['data'](Direction=self.DIRECTIONS['+y'], Duration=int(guide_time_y))
+                self.telescope.get('PulseGuide')(Direction=self.DIRECTIONS['+y'], Duration=int(guide_time_y))
             if pidy < 0 and pidy >= -CURRENT_MAX_SHIFT:
                 guide_time_y = abs(pidy * self.PIX2TIME['-y'])
                 if self.RA_AXIS == 'y':
                     guide_time_y = guide_time_y/cos_dec
-                self.telescope.get('PulseGuide')['data'](Direction=self.DIRECTIONS['-y'], Duration=int(guide_time_y))
+                self.telescope.get('PulseGuide')(Direction=self.DIRECTIONS['-y'], Duration=int(guide_time_y))
             
             # TODO: add timeout
-            while self.telescope.get('IsPulseGuiding')['data']:
+            while self.telescope.get('IsPulseGuiding'):
                 time.sleep(0.01)
                 
             if pidx > 0 and pidx <= CURRENT_MAX_SHIFT:
                 guide_time_x = pidx * self.PIX2TIME['+x']
                 if self.RA_AXIS == 'x':
                     guide_time_x = guide_time_x/cos_dec
-                self.telescope.get('PulseGuide')['data'](Direction=self.DIRECTIONS['+x'], Duration=int(guide_time_x))
+                self.telescope.get('PulseGuide')(Direction=self.DIRECTIONS['+x'], Duration=int(guide_time_x))
 
             if pidx < 0 and pidx >= -CURRENT_MAX_SHIFT:
                 guide_time_x = abs(pidx * self.PIX2TIME['-x'])
                 if self.RA_AXIS == 'x':
                     guide_time_x = guide_time_x/cos_dec
-                self.telescope.get('PulseGuide')['data'](Direction=self.DIRECTIONS['-x'], Duration=int(guide_time_x))
+                self.telescope.get('PulseGuide')(Direction=self.DIRECTIONS['-x'], Duration=int(guide_time_x))
 
             # TODO: add timeout
-            while self.telescope.get('IsPulseGuiding')['data']:
+            while self.telescope.get('IsPulseGuiding'):
                 time.sleep(0.01)
 
             self.logMessageToDb(camera_name, "Guide correction Applied")

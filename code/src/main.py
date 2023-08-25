@@ -54,7 +54,7 @@ def load_observatories():
         if 'FilterWheel' in obs.devices:
             fws[obs.observatory_name] = {}
             for fw_name in obs.devices['FilterWheel'].keys():
-                fws[obs.observatory_name][fw_name] = obs.devices['FilterWheel'][fw_name].get('Names')['data']
+                fws[obs.observatory_name][fw_name] = obs.devices['FilterWheel'][fw_name].get('Names')
 
 def kill_observatories():
     global observatories
@@ -361,16 +361,14 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
 
                 polled = obs.devices[device_type][device_name].poll_latest()
 
-                if polled['status'] == 'success':
+                if polled is not None: # not sure if correct to put this here, or later
 
-                    if polled['data'] is not None: # not sure if correct to put this here, or later
+                    polled_keys = polled.keys()
+                    for k in polled_keys:
 
-                        polled_keys = polled['data'].keys()
-                        for k in polled_keys:
-
-                            polled_list[device_type][device_name][k] = {}
-                            polled_list[device_type][device_name][k]['value'] = polled['data'][k]['value']
-                            polled_list[device_type][device_name][k]['datetime'] = polled['data'][k]['datetime']
+                        polled_list[device_type][device_name][k] = {}
+                        polled_list[device_type][device_name][k]['value'] = polled[k]['value']
+                        polled_list[device_type][device_name][k]['datetime'] = polled[k]['datetime']
 
         table0 = []
         table1 = [{"item": "error free" , "value" : obs.error_free},

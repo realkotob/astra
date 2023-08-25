@@ -116,8 +116,11 @@ def time_conversion(jd, location, target):
 def create_image_dir():
     folder = (datetime.utcnow() - timedelta(days=0.5)).strftime("%Y%m%d")
     mypath = f"../images/{folder}"
-    if not os.path.isdir(mypath):
-        os.makedirs(mypath)
+    try:
+        if not os.path.isdir(mypath):
+            os.makedirs(mypath)
+    except OSError as e:
+        pass
     return folder
 
 def interpolate_dfs(index, *data):
