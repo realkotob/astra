@@ -62,12 +62,36 @@ def update_times(df, time_factor):
 
 class Astra():
     def __init__(self, config_filename : str, debug : bool = False, truncate_schedule : bool = False):
-        # TODO: 
-        # move to process?
-        # add better logging
-        # add better error handling
-        # add types?
-        # improve observatory safety logic
+        """
+        Initialize the Astra object.
+
+        Args:
+        - config_filename (str): path to the configuration file for the observatory.
+        - debug (bool): if True, Astra runs in debug mode.
+        - truncate_schedule (bool): if True, the schedule is truncated by a factor of 100 and moved to the current time.
+
+        Attributes:
+        - debug (bool): whether Astra is running in debug mode.
+        - truncate_schedule (bool): whether the schedule is truncated to the current time.
+        - threads (list): list of threads started by Astra.
+        - queue (Queue): a multiprocessing queue used to communicate between processes.
+        - queue_running (bool): whether the queue is running.
+        - cursor (Cursor): a cursor object used to execute SQL statements on the database.
+        - error_free (bool): whether Astra is error-free.
+        - error_source (list): list of error sources.
+        - weather_safe (None): whether the weather is safe for observing.
+        - watchdog_running (bool): whether the watchdog thread is running.
+        - schedule_running (bool): whether the schedule thread is running.
+        - interrupt (bool): whether Astra is interrupted.
+        - observatory (dict): dictionary containing the configuration of the observatory.
+        - observatory_name (str): name of the observatory.
+        - schedule_mtime (float): modification time of the schedule file.
+        - schedule (DataFrame): pandas DataFrame containing the schedule.
+        - fits_config (DataFrame): pandas DataFrame containing the FITS headers configuration.
+        - devices (dict): dictionary containing the devices used by Astra.
+        - last_image (None): last image taken by Astra.
+        - guider (dict): dictionary containing the guider objects for each telescope.
+        """
 
         self.debug = debug
         self.truncate_schedule = truncate_schedule
@@ -81,7 +105,7 @@ class Astra():
 
         self.threads.append({'type': 'queue', 'device_name': 'queue', 'thread': th, 'id' : 'queue'})
 
-        self.db_name, self.cursor = self.create_db(config_filename)
+        self.cursor = self.create_db(config_filename)
 
         if self.debug is True:
             self.__log('warning', 'Astra is running in debug mode, schedule start time moved to present time and truncated by factor of 100')
@@ -120,11 +144,21 @@ class Astra():
 
         self.__log('info', 'Astra initialized')
     
-    def __log(self, level : str, message : str):
+    def __log(self, level: str, message: str):
         '''
-        Log a message to the database
+        Log a message to the database.
 
-        log levels: info, warning, error, critical
+        Args:
+            level (str): The log level. Valid values are 'info', 'debug', 'warning', 'error', and 'critical'.
+            message (str): The message to log.
+
+        Returns:
+            None
+
+        Raises:
+            None
+
+        Logs the message to the database using the specified log level.
         '''
 
         # make message safe for sql
@@ -149,10 +183,16 @@ class Astra():
         elif level != 'debug':
             self.cursor.execute(f"INSERT INTO log VALUES ('{dt_str}', '{level}', '{message}')")
 
-    def create_db(self, config_filename : str):
-        '''
-        Create a database for the observatory
-        '''
+    def create_db(self, config_filename : str) -> Sqlite3Worker:
+        """
+        Creates a new database with the given configuration file name.
+
+        Args:
+        - config_filename (str): The name of the configuration file.
+
+        Returns:
+        - cursor (Sqlite3Worker): The cursor object for the newly created database.
+        """
 
         db_name = "../log/" + config_filename.split('/')[-1].split('.')[0] + '.db'
         cursor = Sqlite3Worker(db_name)
@@ -181,13 +221,18 @@ class Astra():
 
         cursor.execute(db_command_2)
 
+        return cursor
 
-        return db_name, cursor
+    def read_config(self, config_filename : str) -> dict:
+        """
+        Reads a YAML configuration file and returns a dictionary containing its contents.
 
-    def read_config(self, config_filename : str):
-        '''
-        Read the config yaml file and create a dictionary of observatory's setup.
-        '''
+        Args:
+            config_filename (str): The path to the YAML configuration file.
+
+        Returns:
+            dict: A dictionary containing the contents of the YAML configuration file.
+        """
 
         self.__log('info', 'Reading config file')
 
@@ -967,7 +1012,7 @@ class Astra():
 
             # get filter name
             f = action_value['filter']
-            if type(f) == list:
+            if isinstance(f, list):
                 f = f[filter_list_index]
 
             filterwheel = self.devices['FilterWheel'][paired_devices['FilterWheel']]

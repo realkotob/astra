@@ -31,7 +31,6 @@ Dome:
   - device_name: dome_SAINTEX
     ip: 10.211.55.3:11111
     device_number: 0
-    focus_pos: 10000
 Camera:
   - device_name: camera_SAINTEX
     ip: 10.211.55.3:11111
