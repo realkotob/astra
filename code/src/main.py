@@ -40,8 +40,10 @@ def load_observatories():
     global debug
 
     kill_observatories()
+    config_dir = os.path.join('..', 'config')
+    config_files = glob(os.path.join(config_dir, '*.yml'))
 
-    for config_filename in glob('../config/*.yml'):
+    for config_filename in config_files:
         obs = Astra(config_filename, debug, truncate_schedule)
         observatories[obs.observatory_name] = obs
 
@@ -63,7 +65,7 @@ def kill_observatories():
     if len(observatories) > 0:
         print('Killing observatories')
         # for obs in observatories.values():
-        #     obs.disconnect_all()
+        #     obs.unload_all()
 
         observatories = {}
 
@@ -156,13 +158,6 @@ async def interrupt(observatory: str):
 async def connect(observatory: str):
     obs = observatories[observatory]
     obs.connect_all()
-
-    return {"status": "success", "data": "null", "message": ""}
-
-@app.get("/api/disconnect/{observatory}")
-async def disconnect(observatory: str):
-    obs = observatories[observatory]
-    obs.disconnect_all()
 
     return {"status": "success", "data": "null", "message": ""}
 

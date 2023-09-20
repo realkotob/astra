@@ -23,6 +23,38 @@ from typing import Optional, Tuple, Union
 
 import sqlite3
 
+## for new images
+def create_image_dir():
+    folder = (datetime.utcnow() - timedelta(days=0.5)).strftime("%Y%m%d")
+    mypath = f"../images/{folder}"
+    try:
+        if not os.path.isdir(mypath):
+            os.makedirs(mypath)
+    except OSError as e:
+        pass
+    return folder
+
+## for final fits header
+def interpolate_dfs(index, *data):
+    '''
+    Interpolates panda dataframes onto an index, of same index type (e.g. wavelength in microns)
+    Parameters
+    ----------
+    index: 1d array which data is to be interpolated onto
+    data:       Pandas dataframes 
+    Returns
+    -------
+    df: Interpolated dataframe
+    '''
+    df = pd.DataFrame({'tmp': index}, index=index)
+    for dat in data:
+        dat = dat[~dat.index.duplicated(keep='first')]
+        df = pd.concat([df, dat], axis=1)        
+    df = df.sort_index()
+    df = df.interpolate(method='index', axis=0).reindex(index)
+    df = df.drop(labels='tmp', axis=1)
+
+    return df
 
 def __to_format(jd: float, fmt: str) -> float:
     """
@@ -74,17 +106,18 @@ def to_jd(dt: datetime, fmt: str = 'jd') -> float:
 
 def getLightTravelTimes(target, time_to_correct):
     """
+    From: https://github.com/WarwickAstro/time-conversions
     Get the light travel times to the helio- and
     barycentres
     Parameters
     ----------
     ra : str
-        The Right Ascension of the target in degrees
+    The Right Ascension of the target in degrees
     dec : str
         The Declination of the target in degrees
     time_to_correct : astropy.Time object
-        The time of observation to correct. The astropy.Time
-        object must have been initialised with an EarthLocation
+    The time of observation to correct. The astropy.Time
+    object must have been initialised with an EarthLocation
     Returns
     -------
     ltt_bary : float
@@ -95,93 +128,62 @@ def getLightTravelTimes(target, time_to_correct):
     ------
     None
     """
-    
+
     ltt_bary = time_to_correct.light_travel_time(target)
     ltt_helio = time_to_correct.light_travel_time(target, 'heliocentric')
     return ltt_bary, ltt_helio
 
 def time_conversion(jd, location, target):
+    """
+    https://github.com/WarwickAstro/time-conversions
+    """
 
     time_inp = Time(jd, format='jd', scale='utc', location=location)
-
-    mjd = time_inp.mjd
 
     ltt_bary, ltt_helio = getLightTravelTimes(target, time_inp)
     
     hjd = (time_inp + ltt_helio).value
     bjd = (time_inp.tdb + ltt_bary).value
 
-    return mjd, hjd, bjd
-
-def create_image_dir():
-    folder = (datetime.utcnow() - timedelta(days=0.5)).strftime("%Y%m%d")
-    mypath = f"../images/{folder}"
-    try:
-        if not os.path.isdir(mypath):
-            os.makedirs(mypath)
-    except OSError as e:
-        pass
-    return folder
-
-def interpolate_dfs(index, *data):
-    '''
-    Interpolates panda dataframes onto an index, of same index type (e.g. wavelength in microns)
-    Parameters
-    ----------
-    index: 1d array which data is to be interpolated onto
-    data:       Pandas dataframes 
-    Returns
-    -------
-    df: Interpolated dataframe
-    '''
-    df = pd.DataFrame({'tmp': index}, index=index)
-    for dat in data:
-        dat = dat[~dat.index.duplicated(keep='first')]
-        df = pd.concat([df, dat], axis=1)        
-    df = df.sort_index()
-    df = df.interpolate(method='index', axis=0).reindex(index)
-    df = df.drop(labels='tmp', axis=1)
-
-    return df
+    return hjd, bjd
 
 def hdr_times(hdr, fits_config, location, target):
-    dateobs = pd.to_datetime(hdr['DATE-OBS'])# = (dateobs.strftime('%Y-%m-%dT%H:%M:%S.%f'), 'UTC date/time of exposure start')
+    dateobs = pd.to_datetime(hdr['DATE-OBS'])
 
     dateend = dateobs + timedelta(seconds=hdr['EXPTIME'])
     jd = to_jd(dateobs)
-    jdend = to_jd(dateobs)
+    jdend = to_jd(dateend)
 
-    mjd, hjd, bjd = time_conversion(jd, location, target)
-    mjdend, hjdend, bjdend = time_conversion(jdend, location, target)
+    mjd = jd - 2400000.5
+    mjdend = jdend - 2400000.5
+
+    hjd, bjd = time_conversion(jd, location, target)
 
     for i, row in fits_config[fits_config['fixed'] == False].iterrows():  # noqa: E712
 
         if row['device_type'] == 'astra':
             match row['header']:
-                case 'JD':
-                    hdr[row['header']] = (jd, row['comment'])
-                case 'JD-HELIO':
-                    hdr[row['header']] = (hjd, row['comment'])
                 case 'JD-OBS':
                     hdr[row['header']] = (jd, row['comment'])
+                case 'JD-END':
+                    hdr[row['header']] = (jdend, row['comment'])
                 case 'HJD-OBS':
                     hdr[row['header']] = (hjd, row['comment'])
                 case 'BJD-OBS':
                     hdr[row['header']] = (bjd, row['comment']) 
                 case 'MJD-OBS':
-                    hdr[row['header']] = (mjd, row['comment']) # TODO: Check this
+                    hdr[row['header']] = (mjd, row['comment'])
                 case 'MJD-END':
                     hdr[row['header']] = (mjdend, row['comment']) 
                 case 'DATE-END':
                     hdr[row['header']] = (dateend.strftime('%Y-%m-%dT%H:%M:%S.%f'), row['comment']) 
                 case _:
-                    if row['header'] not in hdr:
-                        # display(row['header'])
-                        print(row['header'], " Yikers. I don't know that one.")
+                    pass
     
     z = (90 - hdr['ALTITUDE']) * np.pi/180
     hdr['AIRMASS'] = (1.002432*np.cos(z)**2 + 0.148386*np.cos(z) + 0.0096467) /  (np.cos(z)**3 + 0.149864*np.cos(z)**2 + 0.0102963*np.cos(z) + 0.000303978) # https://doi.org/10.1364/AO.33.001108, https://en.wikipedia.org/wiki/Air_mass_(astronomy)
 
+## for flat fielding
 def is_sun_rising(obs_location):
     # sun's position now
     obs_time0 = Time.now()
@@ -312,7 +314,7 @@ def gaia_db_query(
     min_ra = ra - ra_fov/2
     max_ra = ra + ra_fov/2
 
-    table = db_query('/Users/peter/Github/gaia-tmass-sqlite/db/gaia_tmass_16_jm_cut.db', min_dec, max_dec, min_ra, max_ra)
+    table = db_query('pointing.db', min_dec, max_dec, min_ra, max_ra)
     if tmass:
         table = table.sort_values(by=['j_m']).reset_index(drop=True)
     else:

@@ -17,9 +17,9 @@ TRUE,str,TRUE,OBSERVER,astra_fixed,Astra,Name of the observer
 TRUE,str,TRUE,OBJECT,astra,,Target as given by the user
 TRUE,str,TRUE,RADESYS,astra_fixed,FK5,Reference system
 TRUE,float,TRUE,EQUINOX,astra_fixed,2000,Standard FK5
-TRUE,str,FALSE,DATE,astra,,Date the file was written
+TRUE,str,FALSE,DATE,astra,,
 TRUE,float,FALSE,MJD-OBS,astra,,MJD at exposure start (d)
-TRUE,str,FALSE,DATE-OBS,astra,,Exposure start
+TRUE,str,FALSE,DATE-OBS,astra,,
 TRUE,str,TRUE,TIMESYS,astra_fixed,UTC,Time system used
 TRUE,float,TRUE,EXPTIME,astra,,Exposure time (s)
 TRUE,float,FALSE,LST,astra,?,"Local Sidereal Time, LST at start (s), time in seconds elapsed since midnight of the start of the exposure"
@@ -33,14 +33,12 @@ FALSE,float,TRUE,XPIXSZ,astra,,Pixel Width in microns (after binning)
 FALSE,float,TRUE,YPIXSZ,astra,,Pixel Height in microns (after binning)
 FALSE,int,TRUE,XORGSUBF,Camera,StartX,Subframe X position in binned pixels
 FALSE,int,TRUE,YORGSUBF,Camera,StartY,Subframe Y position in binned pixels
-FALSE,str,TRUE,ROWORDER,astra,?,Image write order - BOTTOM-UP or TOP-DOWN
-FALSE,str,TRUE,FLIPSTAT,astra,?,
 FALSE,str,TRUE,CAM-SNAM,Camera,SensorName,Camera sensor name
 FALSE,str,TRUE,CAM-STYP,Camera,SensorType,Camera sensor type
 FALSE,str,TRUE,CAM-DNAM,Camera,Name,The short name of the Camera driver
 FALSE,str,TRUE,CAM-DVER,Camera,DriverVersion,Camera driver version
 FALSE,float,TRUE,SET-TEMP,Camera,SetCCDTemperature,CCD temperature setpoint in C
-FALSE,float,FALSE,CCD-TEMP,Camera,CCDTemperature,CCD temperature at __start of exposure__ (not) in C
+FALSE,float,FALSE,CCD-TEMP,Camera,CCDTemperature,CCD temperature at start of exposure in C
 FALSE,int,FALSE,CAM-STAT,Camera,CameraState,Camera status
 ,,,,,,
 FALSE,str,TRUE,FILTER,astra,,Filter name
@@ -88,8 +86,8 @@ FALSE,str,TRUE,OBC-DVER,ObservingConditions,DriverVersion,ObservingConditions dr
 FALSE,str,TRUE,SAF-DNAM,SafetyMonitor,Name,The short name of the SafetyMonitor driver
 FALSE,str,TRUE,SAF-DVER,SafetyMonitor,DriverVersion,SafetyMonitor driver version
 ,,,,,,
-FALSE,float,FALSE,JD-OBS,astra,,Julian Date at time of exposure
-FALSE,float,FALSE,HJD-OBS,astra,?,
+FALSE,float,FALSE,JD-OBS,astra,,Julian Date at start of exposure
+FALSE,float,FALSE,HJD-OBS,astra,,
 FALSE,float,FALSE,BJD-OBS,astra,,
 FALSE,float,FALSE,JD-END,astra,,JD at exposure end (d)
 FALSE,float,FALSE,MJD-END,astra,,MJD at exposure end (d)

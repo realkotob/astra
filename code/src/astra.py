@@ -20,6 +20,8 @@ from sqlite3worker import Sqlite3Worker  # https://github.com/dashawn888/sqlite3
 
 from multiprocessing import Manager
 
+ASTRA_VER = '0.1.0'
+
 def update_times(df, time_factor):
     '''
     Update the start and end times to present day factored by the time factor
@@ -65,33 +67,34 @@ class Astra():
         """
         Initialize the Astra object.
 
-        Args:
-        - config_filename (str): path to the configuration file for the observatory.
-        - debug (bool): if True, Astra runs in debug mode.
-        - truncate_schedule (bool): if True, the schedule is truncated by a factor of 100 and moved to the current time.
+        Parameters:
+            config_filename (str): path to the configuration file for the observatory.
+            debug (bool): if True, Astra runs in debug mode.
+            truncate_schedule (bool): if True, the schedule is truncated by a factor of 100 and moved to the current time.
 
         Attributes:
-        - debug (bool): whether Astra is running in debug mode.
-        - truncate_schedule (bool): whether the schedule is truncated to the current time.
-        - threads (list): list of threads started by Astra.
-        - queue (Queue): a multiprocessing queue used to communicate between processes.
-        - queue_running (bool): whether the queue is running.
-        - cursor (Cursor): a cursor object used to execute SQL statements on the database.
-        - error_free (bool): whether Astra is error-free.
-        - error_source (list): list of error sources.
-        - weather_safe (None): whether the weather is safe for observing.
-        - watchdog_running (bool): whether the watchdog thread is running.
-        - schedule_running (bool): whether the schedule thread is running.
-        - interrupt (bool): whether Astra is interrupted.
-        - observatory (dict): dictionary containing the configuration of the observatory.
-        - observatory_name (str): name of the observatory.
-        - schedule_mtime (float): modification time of the schedule file.
-        - schedule (DataFrame): pandas DataFrame containing the schedule.
-        - fits_config (DataFrame): pandas DataFrame containing the FITS headers configuration.
-        - devices (dict): dictionary containing the devices used by Astra.
-        - last_image (None): last image taken by Astra.
-        - guider (dict): dictionary containing the guider objects for each telescope.
+            debug (bool): whether Astra is running in debug mode.
+            truncate_schedule (bool): whether the schedule is truncated to the current time.
+            threads (list): list of threads started by Astra.
+            queue (Queue): a multiprocessing queue used to communicate between processes.
+            queue_running (bool): whether the queue is running.
+            cursor (Cursor): a cursor object used to execute SQL statements on the database.
+            error_free (bool): whether Astra is error-free.
+            error_source (list): list of error sources.
+            weather_safe (None): whether the weather is safe for observing.
+            watchdog_running (bool): whether the watchdog thread is running.
+            schedule_running (bool): whether the schedule thread is running.
+            interrupt (bool): whether Astra is interrupted.
+            observatory (dict): dictionary containing the configuration of the observatory.
+            observatory_name (str): name of the observatory.
+            schedule_mtime (float): modification time of the schedule file.
+            schedule (DataFrame): pandas DataFrame containing the schedule.
+            fits_config (DataFrame): pandas DataFrame containing the FITS headers configuration.
+            devices (dict): dictionary containing the devices used by Astra.
+            last_image (None): last image taken by Astra.
+            guider (dict): dictionary containing the guider objects for each telescope.
         """
+        self.observatory_name = os.path.splitext(os.path.basename(config_filename))[0]  
 
         self.debug = debug
         self.truncate_schedule = truncate_schedule
@@ -120,14 +123,15 @@ class Astra():
         self.schedule_running = False
         self.interrupt = False
         
-        self.observatory = self.read_config(config_filename)
-        self.observatory_name = config_filename.split('/')[-1].split('.')[0]
+        self.observatory = self.read_config(config_filename)      
 
-        self.schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
+        self.schedule_path = os.path.join('..', 'schedule', f'{self.observatory_name}.csv')
+        self.schedule_mtime = os.path.getmtime(self.schedule_path)
         self.schedule = None
         self.schedule = self.read_schedule()
 
-        self.fits_config = pd.read_csv(f'../config/{self.observatory_name}_fits_headers.csv')
+        fits_config_path = os.path.join('..', 'config', f'{self.observatory_name}_fits_headers.csv')
+        self.fits_config = pd.read_csv(fits_config_path)
 
         self.devices = self.load_devices()
         self.last_image = None
@@ -144,21 +148,13 @@ class Astra():
 
         self.__log('info', 'Astra initialized')
     
-    def __log(self, level: str, message: str):
+    def __log(self, level : str, message : str) -> None:
         '''
-        Log a message to the database.
+        Logs the message to the database using the specified log level.
 
-        Args:
+        Parameters:
             level (str): The log level. Valid values are 'info', 'debug', 'warning', 'error', and 'critical'.
             message (str): The message to log.
-
-        Returns:
-            None
-
-        Raises:
-            None
-
-        Logs the message to the database using the specified log level.
         '''
 
         # make message safe for sql
@@ -187,14 +183,14 @@ class Astra():
         """
         Creates a new database with the given configuration file name.
 
-        Args:
-        - config_filename (str): The name of the configuration file.
+        Parameters:
+            config_filename (str): The name of the configuration file.
 
         Returns:
-        - cursor (Sqlite3Worker): The cursor object for the newly created database.
+            cursor (Sqlite3Worker): The cursor object for the newly created database.
         """
 
-        db_name = "../log/" + config_filename.split('/')[-1].split('.')[0] + '.db'
+        db_name = os.path.join('..', 'log', f'{self.observatory_name}.db')
         cursor = Sqlite3Worker(db_name)
                     
         db_command_0 = """CREATE TABLE IF NOT EXISTS polling (
@@ -227,7 +223,7 @@ class Astra():
         """
         Reads a YAML configuration file and returns a dictionary containing its contents.
 
-        Args:
+        Parameters:
             config_filename (str): The path to the YAML configuration file.
 
         Returns:
@@ -246,9 +242,14 @@ class Astra():
 
         return observatory
     
-    def load_devices(self):
+    def load_devices(self) -> dict:
         '''
-        Read observatory config and create a dictionary of devices
+        This method iterates through the observatory configuration, creating and starting
+        device objects for each defined device.
+
+        Returns:
+            devices (dict): A dictionary containing initialized device objects, categorized
+            by device type.
         '''
 
         self.__log('info', 'Loading devices')
@@ -274,9 +275,12 @@ class Astra():
 
         return devices
 
-    def connect_all(self):
+    def connect_all(self) -> None:
         '''
-        Connect to all the devices and start polling
+        Connects to all loaded devices and starts polling at specific intervals
+        to retrieve non-fixed FITS headers. The polling interval is 5 seconds for most
+        devices and 1 second for the SafetyMonitor.
+
         '''
 
         self.__log('info', 'Connecting to devices')
@@ -321,9 +325,12 @@ class Astra():
         self.__log('info', 'Connect all sequence complete')
         # run can<> ascom commands, needed for other commands to work? Else, alternatives needed.
 
-    def disconnect_all(self):
+    def unload_all(self) -> None:
         '''
-        Stop polling and disconnect from all the devices, # TODO: consider renaming to unload_devices
+        This method gracefully shuts down the various components of the system, including the watchdog,
+        schedule, and polling mechanisms. It also disconnects and unloads all devices registered in the system,
+        ensuring a clean shutdown. Finally, it closes the SQLite database.
+
         '''
         
         self.__log('info', 'Disconnecting from devices')
@@ -352,9 +359,14 @@ class Astra():
 
         self.cursor.close()
 
-    def start_watchdog(self):
+    def start_watchdog(self) -> None:
         '''
-        Start the watchdog thread
+        Start the watchdog thread if it is not already running.
+
+        This method initializes and starts a new thread responsible for monitoring
+        certain aspects of the system. If the watchdog thread is already running,
+        it logs a warning and takes no action.
+
         '''
         
         if self.watchdog_running is True:
@@ -366,11 +378,18 @@ class Astra():
 
         self.threads.append({'type': 'watchdog', 'device_name': 'watchdog', 'thread': th, 'id' : 'watchdog'})
 
-    def watchdog(self):
-        '''
-        Check the observatory is safe.
-        Presently assumes only one safety monitor.
-        '''
+    def watchdog(self) -> None:
+        """
+        Periodically monitors various aspects of the observatory's operation and takes appropriate actions in case of issues.
+
+        This function performs the following checks and actions:
+
+        - Periodically checks the SafetyMonitor's status, telescope altitude, system errors, and device responsiveness.
+        - If the SafetyMonitor indicates unsafe conditions, it closes the observatory.
+        - Starts the schedule independently of weather conditions, running only calibration sequences when weather is unsafe.
+        - Monitors for system errors and handles them as necessary.
+
+        """
 
         self.__log('info', 'Starting watchdog')
 
@@ -426,7 +445,7 @@ class Astra():
 
                     # check if schedule file updated
                     try:
-                        schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
+                        schedule_mtime = os.path.getmtime(self.schedule_path)
 
                         if schedule_mtime > self.schedule_mtime:
                             self.__log('warning', 'Schedule updated')
@@ -524,16 +543,16 @@ class Astra():
                             self.weather_safe = True
                             closed = False # reset closed flag, but should be smarter than this.
                             
-                            # start schedule
-                            if self.schedule.iloc[-1]['end_time'] > datetime.utcnow():
-                                
-                                if self.truncate_schedule is False:
-                                    self.schedule = self.read_schedule()
+                        # start schedule - if weather is not safe, only calibration sequences will run
+                        if self.schedule.iloc[-1]['end_time'] > datetime.utcnow():
+                            
+                            if self.truncate_schedule is False:
+                                self.schedule = self.read_schedule()
 
-                                self.schedule_running = True
-                                th = Thread(target=self.run_schedule, daemon = True)
-                                th.start()
-                                self.threads.append({'type': 'run_schedule', 'device_name': 'Schedule', 'thread': th, 'id' : 'schedule'})
+                            self.schedule_running = True
+                            th = Thread(target=self.run_schedule, daemon = True)
+                            th.start()
+                            self.threads.append({'type': 'run_schedule', 'device_name': 'Schedule', 'thread': th, 'id' : 'schedule'})
 
 
                 except Exception as e:
@@ -604,7 +623,15 @@ class Astra():
         self.watchdog_running = False
         self.__log('warning', 'Watchdog stopped')
     
-    def open_observatory(self, paired_devices = None):
+    def open_observatory(self, paired_devices : dict = None) -> None:
+        """
+        Opens the observatory in a controlled sequence: first, it opens the dome shutter if available, 
+        and then it unparks the telescope if available and weather safe.
+
+        Parameters:
+            paired_devices (dict): A dictionary of paired devices. Defaults to None.
+
+        """
 
         if 'Dome' in self.observatory:
             if self.weather_safe and self.error_free and (self.interrupt is False):
@@ -628,9 +655,22 @@ class Astra():
                     self.monitor_action('Telescope', 'AtPark', False, 'Unpark',
                                         log_message = "Unparking Telescope(s)")
 
-    def close_observatory(self, paired_devices = None):
+    def close_observatory(self, paired_devices : dict = None) -> None:
         '''
-        Close observatory, park telescope, close dome, close dome shutter
+        Close the observatory operations in the following order:
+
+        1. Stop telescope slewing and tracking.
+
+        2. Park the telescope.
+
+        3. Stop guiding if applicable.
+
+        4. Park the dome and close its shutter (if observatory has a dome).
+
+        Parameters:
+            paired_devices (dict, optional): A dictionary of paired devices to specify the target devices.
+                Example: {'Telescope': 'TelescopeName', 'Dome': 'DomeName'}
+
         '''
         
         if 'Telescope' in self.observatory:
@@ -694,9 +734,18 @@ class Astra():
                 self.monitor_action('Dome', 'ShutterStatus', 1, 'CloseShutter',
                                         log_message = "Closing Dome shutter(s)")
 
-    def toggle_interrupt(self):
+    def toggle_interrupt(self) -> None:
         '''
-        Handle interrupt
+        Handle user interrupt by toggling the interrupt flag and stopping various observatory actions.
+
+        This function handles user interruptions by setting the interrupt flag to True, which signals the observatory
+        to stop ongoing actions. It stops the watchdog, schedule, and performs the following actions depending on the
+        observatory components:
+
+        - Telescope: Abort slewing, stop tracking, and stop guiding.
+        - Dome: Abort slewing.
+        - Camera: Stop exposure.
+
         '''
 
         self.interrupt = True
@@ -757,46 +806,50 @@ class Astra():
             else:
                 self.threads.remove(t)
 
-        time.sleep(1) # time for interrupt to be caught by other threads
+        time.sleep(5) # time for interrupt to be caught by other threads
 
         # reset interrupt
         self.interrupt = False
+        
+    def read_schedule(self) -> pd.DataFrame:
+        """
+        Read the schedule CSV file and return it as a pandas DataFrame.
 
-    def read_schedule(self):
-        '''
-        Read the schedule, check for errors (e.g. device not in list/connected), return pandas dataframe
-        Focus offset for changing filter + specified focus offset.
-        If no end_time, set to end time of next item?
-        order by start_time
+        Returns:
+            pd.DataFrame: A DataFrame containing the schedule data, with columns 'start_time' and 'end_time'.
 
-        columns: device_type, device_name, action_type, action_value, start_time, end_time, target, complete
+        Raises:
+            FileNotFoundError: If the schedule CSV file does not exist.
+            Exception: If an error occurs during reading.
 
-        valid action_type per device_type
-        '''
-        # TODO: error handling, add schedule as string to log.db?
+        Notes:
+            - If the schedule CSV file is not found, a FileNotFoundError is raised.
+            - The schedule DataFrame is sorted by the 'start_time' column.
+            - If self.truncate_schedule is True, the schedule is truncated for development purposes using the update_times function.
+        """
+        # TODO: schedule validity checker, add schedule as string to log?
 
         try:
-
-            schedule_mtime = os.path.getmtime(f'../schedule/{self.observatory_name}.csv')
+            schedule_mtime = os.path.getmtime(self.schedule_path)
 
             if (schedule_mtime > self.schedule_mtime) or (self.schedule is None):
 
                 if self.schedule_running is True:
-                    self.__log('warning', 'Schedule updating while previous schedule is running. This will not take effect until the new schedule is run.')
+                    self.__log('warning', 'Schedule updating while the previous schedule is running. This will not take effect until the new schedule is run.')
 
                 self.__log('info', 'Reading schedule')
 
-                schedule = pd.read_csv(f'../schedule/{self.observatory_name}.csv')
-                schedule['start_time'] =  pd.to_datetime(schedule.start_time)
+                schedule = pd.read_csv(self.schedule_path)
+                schedule['start_time'] = pd.to_datetime(schedule.start_time)
                 schedule['end_time'] = pd.to_datetime(schedule.end_time)
 
-                # sort by start_time
+                # Sort the schedule by start_time
                 schedule = schedule.sort_values(by=['start_time'])
 
-                # for development
+                # For development: Truncate the schedule if self.truncate_schedule is True
                 if self.truncate_schedule is True:
                     schedule = update_times(schedule, 100)
-                
+
                 self.__log('info', 'Schedule read')
 
                 self.schedule_mtime = schedule_mtime
@@ -804,16 +857,25 @@ class Astra():
                 return schedule
             else:
                 return self.schedule
-            
+
+        except FileNotFoundError:
+            self.error_source.append({'device_type': 'Schedule', 'device_name': '', 'error': 'Schedule CSV file not found.'})
+            self.__log('error', 'Schedule CSV file not found.')
+            raise
         except Exception as e:
             self.error_source.append({'device_type': 'Schedule', 'device_name': '', 'error': f'Error reading schedule: {e}'})
             self.__log('error', f'Error reading schedule: {e}')
-            return None
+            raise
 
-    def run_schedule(self):
+    def run_schedule(self) -> None:
         '''
-        Run the schedule
-        Interruptible by user and weather conditions
+        Run the schedule while monitoring safety conditions and executing scheduled actions.
+
+        This method manages the execution of a schedule, considering safety checks, weather conditions,
+        and action types. It iterates through schedule rows, starts threads for actions if conditions are met.
+        If the action type is to open or close, it ensures that the actions are completed before proceeding 
+        to the next item in the schedule.
+ 
         '''
         t0 = time.time()
         while self.weather_safe is None and (time.time() - t0) < 120:
@@ -887,9 +949,23 @@ class Astra():
         self.schedule_running = False
         self.__log('info', 'Schedule stopped')
         
-    def run_action(self, row):
+    def run_action(self, row : dict) -> None:
         '''
-        Run the action specified in the schedule
+        Execute the action specified in the schedule.
+
+        Parameters:
+            row (dict): A dictionary representing the action to be executed, including device and action details.
+
+        Raises:
+            ValueError: If the provided action_type is not valid for the specified device.
+            Exception: Any unexpected error that occurs during execution.
+
+        Notes:
+            - For 'object', 'calibration', or 'flats' action types, specialized sequences are executed based on the action_type.
+            - For 'open' action type, the function may turn on camera cooler, set temperature, and open the observatory dome.
+            - For 'close' action type, the function may close the observatory dome.
+            - For other action types, the function assumes it's an ASCOM command and attempts to execute it on the specified device.
+
         '''
 
         self.__log('info', f"Starting {row['device_name']} {row['action_type']}")
@@ -955,9 +1031,30 @@ class Astra():
             self.schedule_running = False
             self.__log('error', f"Run action error: {str(e)}")
         
-    def pre_sequence(self, row, paired_devices):
+    def pre_sequence(self, row : dict, paired_devices :dict) -> tuple:
         '''
-        Preparation for sequence
+        Prepare the observatory and metadata for a sequence.
+
+        This method is responsible for preparing the observatory and gathering necessary information
+        before running a sequence. Depending on the parameters in the action value in the inputted row, 
+        it can move the telescope to specificed (ra, dec) coordinates, and the filter wheel to the specified
+        filter. It also creates a directory for the sequence images and writes a header with relevant information.
+
+        Parameters:
+            row (dict): A dictionary containing information about the sequence action:
+
+                - 'device_name': The name of the device.
+                - 'action_type': The type of action (e.g., 'object').
+                - 'action_value': The action's value (e.g., a command or parameter).
+
+            paired_devices (dict): A list of paired devices required for the sequence.
+
+        Returns:
+            tuple: A tuple containing the following elements:
+
+                - action_value: The evaluated action value.
+                - folder (str): The path to the directory where images will be stored.
+                - hdr (dict): A header dictionary with relevant information for the sequence.
         '''
 
         self.__log('debug', f"Running pre_sequence for {row['device_name']} {row['action_type']} {row['action_value']}")
@@ -966,7 +1063,7 @@ class Astra():
         folder = utils.create_image_dir()
         
         # prepare observatory for sequence
-        self.move_telescope_filter(paired_devices, action_value)
+        self.setup_observatory(paired_devices, action_value)
 
         # write base header
         hdr = self.base_header(paired_devices, action_value)
@@ -978,19 +1075,44 @@ class Astra():
 
         return action_value, folder, hdr
     
-    def move_telescope_filter(self, paired_devices, action_value, filter_list_index = 0):
+    def setup_observatory(self, paired_devices : dict, action_value : dict, filter_list_index : int = 0) -> None:
         '''
-        Prepares the observatory for the sequence
+        Prepares the observatory for a sequence by performing necessary setup actions.
+
+        Parameters:
+            paired_devices (dict): A dictionary specifying paired devices for the sequence.
+            action_value (dict): A dictionary containing information about the action to be performed.
+            filter_list_index (int, optional): The index of the filter in the filter list (default is 0).
+
+        This method prepares the observatory for a sequence by performing the following steps:
+
+        If the action value contains 'ra' and 'dec' keys, it will:
+            1. open_observatory(paired_devices)
+            2. Set telescope tracking to true
+            3. Slew telescope to the specified target coordinates.
+
+        If the action value contains 'filter' key, it will:
+            1. Setting the filter wheel to the specified filter position.
+
+        Notes:
+            - This method relies on certain conditions like weather safety, error-free operation, and no interruptions.
+            - The 'paired_devices' dictionary should specify devices required for the sequence.
+
         '''
 
-        self.__log('debug', f"Running move_telescope_filter for {paired_devices} {action_value}")
+        self.__log('debug', f"Running setup_observatory for {paired_devices} {action_value}")
 
         # unpark and slew to target
         if ('ra' in action_value) and ('dec' in action_value) and self.weather_safe and self.error_free and (self.interrupt is False):
-            
-            self.open_observatory(paired_devices)
 
             if 'Telescope' in paired_devices:
+
+                if 'Dome' not in paired_devices:
+                    self.__log('warning', f"Telescope {paired_devices['Telescope']} has no paired Dome. Opening all available domes.")
+                
+                # open dome and unpark telescope -- this will open all domes if not in paired_devices...?
+                self.open_observatory(paired_devices)
+
                 telescope = self.devices['Telescope'][paired_devices['Telescope']]
 
                 if self.weather_safe and self.error_free and (self.interrupt is False):
@@ -1026,21 +1148,17 @@ class Astra():
                                 device_name = paired_devices['FilterWheel'],
                                 log_message = f"Setting FilterWheel {paired_devices['FilterWheel']} to {f}")
             
-            # TODO: focus offset?
-            # what if reletive/absolute focus?
-            # if 'Focuser' in paired_devices:
-            #     focus_offset = filterwheel.get('FocusOffsets')[filter_index]
-            #     focuser = self.devices['Focuser'][paired_devices['Focuser']]
-                
-            #     fos_index = [i for i, d in enumerate(self.observatory['Focuser']) if d['device_name'] == paired_devices['Focuser']][0]
-            #     focus_pos = self.observatory['Focuser'][fos_index]['focus_pos']
+    def wait_for_slew(self, paired_devices : dict) -> None:
+        '''
+        Wait for a telescope to complete its slewing operation.
 
-            #     focuser.get('Move')(focus_pos + focus_offset)
-            #     while focuser.get('IsMoving') == True:
-            #         print('moving focuser')
-            #         time.sleep(1)
+        Parameters:
+            paired_devices (dict): A dictionary containing paired devices, including the 'Telescope' device.
 
-    def wait_for_slew(self, paired_devices):
+        Raises:
+            TimeoutError: If the slewing operation takes longer than 2 minutes.
+
+        '''
 
         telescope = self.devices['Telescope'][paired_devices['Telescope']]
 
@@ -1061,9 +1179,32 @@ class Astra():
 
             slewing = telescope.get('Slewing')
                 
-    def calibration_sequence(self, row, paired_devices):
+    def calibration_sequence(self, row : dict, paired_devices : dict) -> None:
         '''
-        Bias, darks
+        Run a bias/dark calibration sequence for a specific camera.
+
+        This function performs a calibration sequence for a camera, capturing bias and dark frames.
+        It operates based on the provided parameters and camera settings.
+
+        Parameters:
+            row (dict): A dictionary containing information about the camera and calibration settings.
+
+                - 'device_name' (str): The name of the camera device.
+                - 'start_time' (datetime): The start time for the calibration sequence.
+                - 'end_time' (datetime): The end time for the calibration sequence.
+                - 'device_type' (str): The type of the camera device.
+
+            paired_devices (dict): A dictionary of paired devices used in the calibration sequence.
+
+        Notes:
+            - The function logs information about the calibration sequence's progress.
+            - It captures bias and dark frames for different exposure times as specified in 'action_value'.
+            - The sequence will continue to run until one of the following conditions is met:
+                - The current time exceeds 'end_time'.
+                - An error occurs during execution.
+                - The sequence is manually interrupted.
+                - The schedule is stopped.
+                - The watchdog process is terminated.
         '''
 
         self.__log('info', f"Running calibration sequence for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
@@ -1121,15 +1262,39 @@ class Astra():
 
         self.__log('info', f"Calibration sequence ended for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
-    def object_sequence(self, row, paired_devices):
+    def object_sequence(self, row : dict, paired_devices : dict) -> None:
         '''
-        Object sequence
+        Run an object sequence for a specified device.
+
+        This method executes a sequence of actions for a given device, such as capturing images, pointing correction,
+        and guiding if necessary, within a specified time frame and under specific conditions.
+
+        Parameters:
+            row (dict): A dictionary containing information about the sequence and the device, including 'action_value', 'device_name', 'start_time', and 'end_time'.
+            paired_devices (dict): A dictionary specifying paired devices, such as a Telescope for guiding.
+
+        Notes:
+            - The 'row' dictionary should have the following keys:
+                - 'action_value' (str): A JSON-encoded string containing configuration values for the sequence.
+                - 'device_name' (str): The name of the device on which the sequence is to be executed.
+                - 'start_time' (datetime): The start time for the sequence.
+                - 'end_time' (datetime): The end time for the sequence.
+            - The method will perform actions like capturing images, pointing correction, and guiding based on the 'action_value'.
+            - The sequence will continue to run until one of the following conditions is met:
+                - The current time exceeds 'end_time'.
+                - Adverse weather conditions are detected.
+                - An error occurs during execution.
+                - The sequence is manually interrupted.
+                - The schedule is stopped.
+                - The watchdog process is terminated.
         '''
+
         self.__log('info', f"Running object sequence for {eval(row['action_value'])['object']} with {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
         action_value, folder, hdr = self.pre_sequence(row, paired_devices)
 
         hdr['EXPTIME'] = action_value['exptime']
+
         camera = self.devices[row['device_type']][row['device_name']]
 
         maxadu = camera.get('MaxADU')
@@ -1137,6 +1302,7 @@ class Astra():
         camera.get('StartExposure')(Duration = action_value['exptime'], Light = True)
 
         pointing_complete = False
+        pointing_attempts = 0
         guiding = False
 
         while (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) \
@@ -1160,7 +1326,7 @@ class Astra():
                 self.__log('debug', f"Saving image from {row['device_name']}")
                 filepath = self.save_image(camera, hdr, dateobs, t0, maxadu, folder)
                 
-                # pointing correction if not already done (only runs once)
+                # pointing correction if not already done
                 if 'pointing' in action_value and pointing_complete is False:
                     if action_value['pointing'] is True:
                         self.__log('info', f"Running pointing correction for {action_value['object']} with {row['device_name']}")
@@ -1168,12 +1334,13 @@ class Astra():
                         try:
                             offset_ra, offset_dec, wcs = utils.point_correction(filepath, action_value['ra'], action_value['dec'])
                         except Exception as e:
-                            # self.error_source.append({'device_type': 'Pointing', 'device_name': paired_devices['Telescope'], 'error': str(e)})
                             self.__log('warning', f"Error running pointing correction for {action_value['object']} with {row['device_name']}: {str(e)}")
                             pointing_complete = True
 
-                        if pointing_complete is False:               
-                            pointing_threshold = 0.1 / 60 # 0.1 arcmin
+                        if pointing_complete is False:
+                            tel_index = [i for i, d in enumerate(self.observatory['Telescope']) if d['device_name'] == paired_devices['Telescope']][0]
+                            pointing_threshold = self.observatory['Telescope'][tel_index]['pointing_threshold'] / 60
+
                             if (abs(offset_ra) < pointing_threshold) or (abs(offset_dec) < pointing_threshold):
                                 self.__log('info', f"No further pointing correction required. Correction of {offset_ra*60}\" {offset_dec*60}\" within threshold of {pointing_threshold*60}\"")
                                 pointing_complete = True
@@ -1185,7 +1352,13 @@ class Astra():
                                 telescope.get('SyncToCoordinates')(RightAscension = 24*(action_value['ra'] + offset_ra)/360, Declination = action_value['dec'] + offset_dec)
                                 
                                 # re-slew to target
-                                self.move_telescope_filter(paired_devices, action_value)
+                                self.setup_observatory(paired_devices, action_value)
+                        
+                            pointing_attempts += 1
+
+                            if pointing_attempts > 3:
+                                self.__log('warning', f"Pointing correction for {action_value['object']} with {row['device_name']} failed after {pointing_attempts} attempts")
+                                pointing_complete = True
 
                 # initialise guiding once pointing correction is complete
                 if 'guiding' in action_value and guiding is False and pointing_complete is True:
@@ -1193,8 +1366,9 @@ class Astra():
                         
                         self.__log('info', f"Starting guiding for {paired_devices['Telescope']}")
 
-                        glob_str = f"../images/{folder}/{row['device_name']}_{action_value['filter']}_{action_value['object']}_{action_value['exptime']}_*.fits"
-
+                        glob_str = os.path.join("..", "images", folder, 
+                                                f"{row['device_name']}_{action_value['filter']}_{action_value['object']}_{action_value['exptime']}_*.fits")
+                        
                         th = Thread(target=self.guider[paired_devices['Telescope']].guider_loop, args=(camera.device_name, glob_str,), daemon=True)
                         th.start()
 
@@ -1206,7 +1380,7 @@ class Astra():
                 self.__log('debug', f"Exposing {row['device_name']} again")
                 camera.get('StartExposure')(Duration = action_value['exptime'], Light = True)
 
-            
+        # stop guiding at end of sequence
         if 'guiding' in action_value:
             if action_value['guiding'] is True:
                 self.__log('info', f"Stopping guiding for {paired_devices['Telescope']}")
@@ -1218,20 +1392,42 @@ class Astra():
             
         self.__log('info', f"Object sequence ended {eval(row['action_value'])['object']} with {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
-    def flats_sequence(self, row, paired_devices):
+    def flats_sequence(self, row : dict, paired_devices : dict) -> None:
         '''
-        Flat sequence
+        Performs a flats sequence.
+
+        A flats sequence is a series of exposures with a consistent brightness level, typically used for calibrating images.
+
+        Parameters:
+            row (dict): A dictionary containing information about the sequence and the device, including 'action_value', 'device_name', 'start_time', and 'end_time'.
+            It should include keys like 'device_name', 'start_time', and 'end_time'.
+
+            paired_devices (dict): A dictionary of paired devices required for the sequence.
+
+
+        The function captures and saves flat field images, adjusting exposure times as necessary to reach the
+        desired target ADU (Analog-to-Digital Unit) value, set in the config file.
+
+        Reference:
+            Wei, P., Shang, Z., Ma, B., Zhao, C., Hu, Y. and Liu, Q., 2014, August. Problems with twilight/supersky flat-field for wide-field robotic telescopes and the solution. In Observatory Operations: Strategies, Processes, and Systems V (Vol. 9149, pp. 877-883). SPIE.
+            https://arxiv.org/pdf/1407.8283.pdf
+
+        Notes:
+            - The sequence will continue to run until one of the following conditions is met:
+                - The current time exceeds 'end_time'.
+                - Adverse weather conditions are detected.
+                - An error occurs during execution.
+                - The sequence is manually interrupted.
+                - The schedule is stopped.
+                - The watchdog process is terminated.
+
         '''
-        # https://arxiv.org/pdf/1407.8283.pdf
-        # https://iopscience.iop.org/article/10.1086/133817/pdf?casa_token=ogWaY-ZHTqYAAAAA:XvO7oL5ZGqnsCIRyF3zqQJJeLWpuxmnHiBU7ubMuGL5ipJhYXey6fix4HoTbOcYTFta6CnDqYQ
-        # https://docs.pyobs.org/en/latest/api/utils/skyflats.html#pyobs.utils.skyflats.FlatFielder
-        # https://github.com/pyobs/pyobs-core/blob/master/pyobs/utils/skyflats/pointing/static.py
 
         self.__log('info', f"Running flats sequence for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
         action_value, folder, hdr = self.pre_sequence(row, paired_devices)
 
-        # camera device (first filter set in pre_sequence)
+        # camera device (first filter set in pre_sequence by this point)
         camera = self.devices[row['device_type']][row['device_name']]
 
         # target adu and camera offset needed for flat exposure time calculation
@@ -1255,7 +1451,6 @@ class Astra():
         obs_lon = hdr['LONG-OBS']
         obs_alt = hdr['ALT-OBS']
         obs_location = EarthLocation(lat=obs_lat*u.deg, lon=obs_lon*u.deg, height=obs_alt*u.m)
-
         
         for i, filter_name in enumerate(action_value['filter']):
             count = 0
@@ -1264,13 +1459,13 @@ class Astra():
                 and self.schedule_running and self.watchdog_running:
 
                 # sets filter (and focus, soon)
-                self.move_telescope_filter(paired_devices, action_value, filter_list_index = i)
+                self.setup_observatory(paired_devices, action_value, filter_list_index = i)
 
                 # move telescope to flat position
-                self.move_to_flat_position(obs_location, paired_devices, row)
+                self.flats_position(obs_location, paired_devices, row)
                 
                 # establishing initial exposure time
-                exptime = self.set_flats_exposure_time(paired_devices, row, numx, numy, startx, starty, target_adu, offset,
+                exptime = self.flats_exptime(paired_devices, row, numx, numy, startx, starty, target_adu, offset,
                                                         lower_exptime_limit, upper_exptime_limit)
                 
                 if exptime < lower_exptime_limit or exptime > upper_exptime_limit:
@@ -1308,11 +1503,12 @@ class Astra():
 
                         # if time passes 30s, move telescope
                         if (datetime.utcnow() - t_last_move).total_seconds() >= 30:
+
                             # move telescope to flat position
-                            self.move_to_flat_position(obs_location, paired_devices)
+                            self.flats_position(obs_location, paired_devices)
                             
                             # get new exposure time since moved
-                            exptime = self.set_flats_exposure_time(paired_devices, numx, numy, startx, starty, target_adu, offset,
+                            exptime = self.flats_exptime(paired_devices, numx, numy, startx, starty, target_adu, offset,
                                                                     lower_exptime_limit, upper_exptime_limit, exposure_time=exptime)
                             t_last_move = datetime.utcnow()
 
@@ -1331,8 +1527,7 @@ class Astra():
                                         break
                                     else:
                                         self.__log('info', f"Setting new exposure time to {exptime} s as median ADU of {median_adu} is not within {target_adu[1]} of {target_adu[0]}")
-
-                        
+     
                         hdr['EXPTIME'] = exptime
 
                         count += 1
@@ -1344,7 +1539,25 @@ class Astra():
         
         self.__log('info', f"Flat sequence ended for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
-    def move_to_flat_position(self, obs_location, paired_devices, row):
+    def flats_position(self, obs_location : EarthLocation, paired_devices : dict, row : dict) -> None:
+        '''
+        Move a telescope to a optimal sky flat position for capturing flat frames.
+
+        Parameters:
+            obs_location (EarthLocation): The location of the observatory.
+            paired_devices (dict): A dictionary of paired devices required for the sequence.
+            row (dict): A dictionary containing information about the sequence and the device, including 'action_value', 'device_name', 'start_time', and 'end_time'.
+
+        Notes:
+            - The sequence will continue to run until one of the following conditions is met:
+                - The current time exceeds 'end_time'.
+                - Adverse weather conditions are detected.
+                - An error occurs during execution.
+                - The sequence is manually interrupted.
+                - The schedule is stopped.
+                - The watchdog process is terminated.
+
+        '''
 
         if 'Telescope' in paired_devices:
             # check if ready to take flats
@@ -1361,8 +1574,8 @@ class Astra():
             # move telescope to flat position
             telescope = self.devices['Telescope'][paired_devices['Telescope']]
 
-            # get "sweet spot" for flat-fielding
-            altaz = SkyCoord(
+            # flat position
+            flat_position = SkyCoord(
                 alt=75 * u.deg, az=sun_altaz.az + 180 * u.degree, obstime=Time.now(), location=obs_location, frame="altaz"
             )
 
@@ -1371,15 +1584,38 @@ class Astra():
                                     device_name = paired_devices['Telescope'],
                                     log_message = f"Setting Telescope {paired_devices['Telescope']} tracking to True")
 
-            # slew to sweet spot
-            telescope.get('SlewToAltAzAsync')(Azimuth=altaz.az.deg, Altitude=altaz.alt.deg)
+            # slew
+            telescope.get('SlewToAltAzAsync')(Azimuth=flat_position.az.deg, Altitude=flat_position.alt.deg)
             
+            # wait for slew to finish
             self.wait_for_slew(paired_devices)
 
-    def set_flats_exposure_time(self, paired_devices, row, numx, numy, startx, starty, target_adu, offset, 
-                                lower_exptime_limit, upper_exptime_limit, exposure_time = None):
+    def flats_exptime(self, paired_devices : dict, row : dict, numx : int, numy : int, startx : int, starty : int, target_adu : list,
+                        offset : float, lower_exptime_limit : float, upper_exptime_limit : float, exptime : float = None) -> float:
         '''
-        Check if exposure time is correct for flats
+        Set the exposure time for flat field calibration images.
+
+        This function adjusts the exposure time for flat field calibration images captured with a camera device
+        to achieve a specific target median ADU (Analog-to-Digital Units) level, considering user-defined limits. It uses 64x64 
+        pixel subframes to speed up the process.
+
+        Parameters:
+            paired_devices (dict): A dictionary specifying paired devices, including 'Camera' for the camera device.
+            row (dict): A dictionary containing timing information for the flat field calibration.
+            numx (int): The original number of pixels in the X-axis of the camera sensor.
+            numy (int): The original number of pixels in the Y-axis of the camera sensor.
+            startx (int): The original starting pixel position in the X-axis for the camera sensor.
+            starty (int): The original starting pixel position in the Y-axis for the camera sensor.
+            target_adu (list): A list containing the target ADU level and tolerance as [target_level, tolerance].
+            offset (float): The offset ADU level to be considered when adjusting the exposure time.
+            lower_exptime_limit (float): The lower limit for the exposure time in seconds.
+            upper_exptime_limit (float): The upper limit for the exposure time in seconds.
+            exptime (float, optional): The initial exposure time guess. If not provided, it is calculated as the
+                midpoint between lower_exptime_limit and upper_exptime_limit.
+
+        Returns:
+            exptime (float): The adjusted exposure time in seconds that meets the target ADU level within the specified limits.
+
         '''
         if 'Camera' in paired_devices:
             
@@ -1399,19 +1635,19 @@ class Astra():
                                 device_name = paired_devices['Camera'],
                                 log_message = f"Setting Camera {paired_devices['Camera']} StartY to {int(numy/2 - 32)}")
             
-            if exposure_time is None:
-                exposure_time = (lower_exptime_limit + upper_exptime_limit) / 2
+            # initial exposure time guess
+            if exptime is None:
+                exptime = (lower_exptime_limit + upper_exptime_limit) / 2
 
-            self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {exposure_time} s")
-            camera.get('StartExposure')(Duration = exposure_time, Light = True)
+            self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {exptime} s")
+            camera.get('StartExposure')(Duration = exptime, Light = True)
             
-            getting_exposure_time = True
+            getting_exptime = True
             while (row['start_time'] <= datetime.utcnow()) and (row['end_time'] >= datetime.utcnow()) \
-                    and getting_exposure_time and self.error_free and (self.interrupt is False) \
+                    and getting_exptime and self.error_free and (self.interrupt is False) \
                     and self.weather_safe and self.schedule_running and self.watchdog_running:
                 
                 r = camera.get('ImageReady')
-        
                 time.sleep(0) # yield to other threads
                 if r is True:
 
@@ -1420,18 +1656,19 @@ class Astra():
                     fraction = (median_adu - offset) / (target_adu[0] - offset)
   
                     if math.isclose(target_adu[0], median_adu, rel_tol=0, abs_tol=target_adu[1]) is False:
-                        exposure_time = exposure_time * fraction
+                        exptime = exptime * fraction
 
-                        if exposure_time < lower_exptime_limit or exposure_time > upper_exptime_limit:
-                            self.__log('warning', f"Exposure time of {exposure_time} s out of user defined range of {lower_exptime_limit} s to {upper_exptime_limit} s")
-                            getting_exposure_time = False
+                        if exptime < lower_exptime_limit or exptime > upper_exptime_limit:
+                            self.__log('warning', f"Exposure time of {exptime} s out of user defined range of {lower_exptime_limit} s to {upper_exptime_limit} s")
+                            getting_exptime = False
                         else:
-                            # start next exposure to check if correct
-                            self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {exposure_time} s")
-                            camera.get('StartExposure')(Duration = exposure_time, Light = True)
+                            getting_exptime = False
+                            # start next exposure to check if correct?
+                            # self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {exptime} s")
+                            # camera.get('StartExposure')(Duration = exptime, Light = True)
 
                     else:
-                        getting_exposure_time = False
+                        getting_exptime = False
 
                 
             # set camera back to original framing
@@ -1448,20 +1685,20 @@ class Astra():
                                 device_name = paired_devices['Camera'],
                                 log_message = f"Setting Camera {paired_devices['Camera']} StartY to {starty}")
             
-            return exposure_time
+            return exptime
             
-    def img_transform(self, device, img, maxadu : int):
+    def img_transform(self, device : AlpacaDevice, img : np.array, maxadu : int) -> np.array:
         '''
         This function takes in a device object, an image object, and a maximum ADU 
         value and returns a numpy array of the correct shape for astropy.io.fits.
 
         Parameters:
-        - device: A device object that contains the ImageArrayInfo data.
-        - img: An image object that contains the image data.
-        - maxadu: The maximum ADU value.
+            device (AlpacaDevice): A device object that contains the ImageArrayInfo data.
+            img (np.array): An image object that contains the image data.
+            maxadu (int): The maximum ADU value.
 
         Returns:
-        - nda: A numpy array of the correct shape for astropy.io.fits.
+            nda (np.array): A numpy array of the correct shape for astropy.io.fits.
         '''
         
         imginfo = device.get('ImageArrayInfo')
@@ -1488,9 +1725,29 @@ class Astra():
 
         return nda
         
-    def save_image(self, device, hdr, dateobs, t0, maxadu, folder):
+    def save_image(self, device : AlpacaDevice, hdr : fits.Header, dateobs : datetime, t0 : datetime, maxadu : int, folder : str) -> str:
         '''
-        Save image to disk
+        Save an image to disk.
+
+        This function retrieves an image from an Alpaca device, transforms it, and saves it to disk in FITS format.
+        The filename is generated based on device information and the image's characteristics.
+
+        The FITS header is updated with the 'DATE-OBS' and 'DATE' keywords to record the exposure start time
+        and the time when the file was written.
+
+        After saving the image, it is logged, and its file path is returned.
+
+        Parameters:
+            device (AlpacaDevice): The camera from which to retrieve the image.
+            hdr (fits.Header): The FITS header associated with the image.
+            dateobs (datetime): The UTC date and time of exposure start.
+            t0 (datetime): The starting time of the image acquisition.
+            maxadu (int): The maximum analog-to-digital unit value for the image.
+            folder (str): The folder where the image will be saved.
+
+        Returns:
+            str: The file path to the saved image.
+
         '''
         self.__log('debug', 'Getting image array')
         arr = device.get('ImageArray')
@@ -1511,9 +1768,11 @@ class Astra():
         hdu = fits.PrimaryHDU(nda, header=hdr)
 
         if hdr['IMGTYPE'] == 'Light':
-            filepath = f"../images/{folder}/{device.device_name}_{hdr['FILTER']}_{hdr['OBJECT']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+            filename = f"{device.device_name}_{hdr['FILTER']}_{hdr['OBJECT']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
         else:
-            filepath = f"../images/{folder}/{device.device_name}_{hdr['IMGTYPE']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+            filename = f"{device.device_name}_{hdr['IMGTYPE']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+
+        filepath = os.path.join('..', 'images', folder, filename)
 
         self.__log('debug', 'Writing to disk')
         hdu.writeto(filepath)
@@ -1524,31 +1783,30 @@ class Astra():
         ## add to database            
         dt = dateobs.strftime("%Y-%m-%d %H:%M:%S.%f")
         self.cursor.execute(f"INSERT INTO images VALUES ('{filepath}', '{device.device_name}', '{0}', '{dt}')")
-        self.__log('info', f"Image saved as {filepath.split('/')[-1]}")
+        self.__log('info', f"Image saved as {os.path.basename(filepath)}")
         self.__log('info', f"Image acquired in {datetime.utcnow() - t0}")
 
         return filepath
 
-    def base_header(self, paired_devices, action_value):
+    def base_header(self, paired_devices : dict, action_value : dict) -> fits.Header:
         '''
         This function creates a base header for the fits file.
 
         Parameters:
-        - paired_devices: A dictionary of paired devices.
-        - action_value: A dictionary of action values.
+            paired_devices (dict): A dictionary specifying paired devices, such as Telescope.
+            action_value (dict): A dictionary containing action values from schedule.
 
         Returns:
-        - hdr: A base header for the fits file.
+            fits.Header: The FITS header containing the specified header entries.
+
         '''
-        
-        # TODO: error handling
 
         self.__log('info', "Creating base header")
 
         hdr = fits.Header()
-        # need to add if statement for target/darks/bias
         for i, row in self.fits_config.iterrows():
             if row['device_type'] == 'astra' and row['fixed'] is True:
+                # custom headers
                 match row['header']:
                     case 'FILTER':
                         device = self.devices['FilterWheel'][paired_devices['FilterWheel']]
@@ -1582,19 +1840,23 @@ class Astra():
                             hdr[row['header']] = (action_value[row['header'].lower()], row["comment"])
                     case 'EXPTIME' | 'IMAGETYP':
                         hdr[row['header']] = (None, row["comment"])
+                    case 'ASTRA':
+                        hdr[row['header']] = (ASTRA_VER, row["comment"])
                     case _:
                         self.__log('warning', f"Unknown header: {row['header']}")
 
             elif (row['device_type'] not in ['astropy_default', 'astra', 'astra_fixed', '']) and row['fixed'] is True:
+                # direct ascom command headers
                 device_type = row['device_type']
                 device_name = paired_devices[device_type]
                 device = self.devices[device_type][device_name]
 
-                r = device.get(row['device_command'])  ## error handling
+                val = device.get(row['device_command'])
 
-                hdr[row['header']] = (r, row["comment"])
+                hdr[row['header']] = (val, row["comment"])
 
             elif row['device_type'] == 'astra_fixed':
+                # fixed headers, ensure datatype
                 try:
                     match row['dtype']:
                         case 'float':
@@ -1615,94 +1877,140 @@ class Astra():
 
         return hdr
     
-    def final_headers(self):
+    def final_headers(self) -> None:
         '''
-        Add final headers to fits file
+        Add final headers to fits file.
+
+        This method retrieves the captured image paths from the sqlite.db, and adds the missing headers 
+        using the polled data from each device (see 'connect_all' method). The polled data is then interpolated onto
+        the same time series using the same dateobs from the fits file. The final headers are then written to the fits file.
+
+        The process involves the following steps:
+            1. Fetch images from the sqlite database that have not yet received final headers.
+            2. Sort and process images by camera.
+            3. Retrieve polled data from ASCOM devices within a time window around the first and last image timestamps.
+            4. Extract unique headers and comments from a fits_config dictionary.
+            5. Interpolate and populate headers for each image using the polled data.
+            6. Update the FITS files with the final headers.
+            7. Mark processed images as complete in the database.
+
+        Raises:
+            Exception: If any error occurs during the header completion process, it is logged and added to 'error_source'.
+
+        Returns:
+            None
 
         '''
-        # TODO: make sure interpolated onto right time
-        # TODO: error handling...
 
-        ## get images from sql
-        rows = self.cursor.execute("SELECT * FROM images WHERE complete_hdr = 0;")
-        df_images = pd.DataFrame(rows, columns=['filepath', 'camera_name', 'complete_hdr', 'date_obs'])
+        try:
+            # get images from sql
+            rows = self.cursor.execute("SELECT * FROM images WHERE complete_hdr = 0;")
+            df_images = pd.DataFrame(rows, columns=['filepath', 'camera_name', 'complete_hdr', 'date_obs'])
 
-        if df_images.shape[0] > 0:
-            for cam in df_images['camera_name'].unique():
+            if df_images.shape[0] > 0:
+                # loop through cameras (usually just one)
+                for cam in df_images['camera_name'].unique():
 
-                df_images_filt = df_images[df_images['camera_name'] == cam]
+                    # filter image dataframe by camera
+                    df_images_filt = df_images[df_images['camera_name'] == cam]
 
-                ## get paired devices
-                cam_index = [i for i, d in enumerate(self.observatory['Camera']) if d['device_name'] == cam][0]
-                paired_devices = self.observatory['Camera'][cam_index]['paired_devices']
-                paired_devices['Camera'] = cam
+                    # get paired devices for camera
+                    cam_index = [i for i, d in enumerate(self.observatory['Camera']) if d['device_name'] == cam][0]
+                    paired_devices = self.observatory['Camera'][cam_index]['paired_devices']
+                    paired_devices['Camera'] = cam
 
-                df_images_filt['date_obs'] = pd.to_datetime(df_images_filt['date_obs'], format='%Y-%m-%d %H:%M:%S.%f')
+                    # convert date_obs to datetime type, sort by date_obs, and convert to jd
+                    df_images_filt['date_obs'] = pd.to_datetime(df_images_filt['date_obs'], format='%Y-%m-%d %H:%M:%S.%f')
+                    df_images_filt = df_images_filt.sort_values(by='date_obs').reset_index(drop=True)
+                    df_images_filt['jd_obs'] = df_images_filt['date_obs'].apply(utils.to_jd).sort_values()
 
-                df_images_filt = df_images_filt.sort_values(by='date_obs').reset_index(drop=True)
-                df_images_filt['jd_obs'] = df_images_filt['date_obs'].apply(utils.to_jd).sort_values()
+                    # add small time increment to avoid duplicate jd, this adds 0.0864 ms to each image that has duplicate jd_obs
+                    while df_images_filt['jd_obs'].duplicated().sum() > 0:
+                        df_images_filt['jd_obs'] = df_images_filt['jd_obs'].mask(df_images_filt['jd_obs'].duplicated(), df_images_filt['jd_obs'] + 1e-9)
 
-                # add small time increment to avoid duplicate jd TODO: better fix needed
-                df_images_filt['jd_obs'] = df_images_filt['jd_obs'].reset_index().apply(lambda x : x + x['index'] * 1e-9, axis=1).drop('index', axis=1)['jd_obs']
+                    df_images_filt = df_images_filt.sort_values(by='jd_obs').reset_index()
 
-                ## get polled data from ascom devices
-                t0 = pd.to_datetime(df_images_filt['date_obs'].iloc[0]) - pd.Timedelta('10 sec') # right to use 10 sec?
-                t1 = pd.to_datetime(df_images_filt['date_obs'].iloc[-1]) + pd.Timedelta('10 sec')
-                                                                                                        
-                q = f"""SELECT * FROM polling WHERE datetime BETWEEN "{str(t0)}" AND "{str(t1)}";"""
-                rows = self.cursor.execute(q)
-                df_poll = pd.DataFrame(rows, columns=['device_type', 'device_name', 'device_command', 'device_value', 'datetime'])
-                df_poll['jd'] = pd.to_datetime(df_poll['datetime'], format='%Y-%m-%d %H:%M:%S.%f').apply(utils.to_jd)
+                    # get polled data from ascom devices +- 10 seconds of first and last image
+                    t0 = pd.to_datetime(df_images_filt['date_obs'].iloc[0]) - pd.Timedelta('10 sec')
+                    t1 = pd.to_datetime(df_images_filt['date_obs'].iloc[-1]) + pd.Timedelta('10 sec')
+                                                                                                            
+                    q = f"""SELECT * FROM polling WHERE datetime BETWEEN "{str(t0)}" AND "{str(t1)}";"""
+                    rows = self.cursor.execute(q)
+                    df_poll = pd.DataFrame(rows, columns=['device_type', 'device_name', 'device_command', 'device_value', 'datetime'])
+                    df_poll['jd'] = pd.to_datetime(df_poll['datetime'], format='%Y-%m-%d %H:%M:%S.%f').apply(utils.to_jd)
 
-                ## find unique headers in polled commands
-                df_poll_unique = df_poll[['device_type', 'device_name', 'device_command']].drop_duplicates()
+                    # find unique headers in polled commands
+                    df_poll_unique = df_poll[['device_type', 'device_name', 'device_command']].drop_duplicates()
 
-                ## drop row that have device_type and device_command that are not in fits_config
-                df_poll_unique = df_poll_unique[df_poll_unique.apply(lambda x : (x['device_type'] in self.fits_config['device_type'].values) and (x['device_command'] in self.fits_config['device_command'].values), axis=1)]
+                    # drop row that have device_type and device_command that are not in fits_config to avoid errors later
+                    df_poll_unique = df_poll_unique[df_poll_unique.apply(lambda x : (x['device_type'] in self.fits_config['device_type'].values) and 
+                                                                        (x['device_command'] in self.fits_config['device_command'].values), axis=1)]
 
-                df_poll_unique['header'] = df_poll_unique.apply(lambda x : (self.fits_config[(self.fits_config['device_type'] == x['device_type']) & (self.fits_config['device_command'] == x['device_command'])]['header'].values[0]), axis=1)
-                df_poll_unique['comment'] = df_poll_unique.apply(lambda x : (self.fits_config[(self.fits_config['device_type'] == x['device_type']) & (self.fits_config['device_command'] == x['device_command'])]['comment'].values[0]), axis=1)
+                    # get header and comment from fits_config
+                    df_poll_unique['header'] = df_poll_unique.apply(lambda x : (self.fits_config[(self.fits_config['device_type'] == x['device_type']) & 
+                                                                        (self.fits_config['device_command'] == x['device_command'])]['header'].values[0]), axis=1)
+                    df_poll_unique['comment'] = df_poll_unique.apply(lambda x : (self.fits_config[(self.fits_config['device_type'] == x['device_type']) & 
+                                                                        (self.fits_config['device_command'] == x['device_command'])]['comment'].values[0]), axis=1)
 
-                ## keep rows that only have device_name in paired_devices
-                df_poll_unique = df_poll_unique[df_poll_unique['device_name'].isin(paired_devices.values())]
+                    # keep rows that only have device_name in paired_devices
+                    df_poll_unique = df_poll_unique[df_poll_unique['device_name'].isin(paired_devices.values())]
 
-                ## form interpolated dataframe
-                df_inp = pd.DataFrame(columns=df_poll_unique['header'], index=df_images_filt['jd_obs'])
+                    # form interpolated dataframe
+                    df_inp = pd.DataFrame(columns=df_poll_unique['header'], index=df_images_filt['jd_obs'])
 
-                for i, row in df_poll_unique.iterrows():
-                    df_poll_filtered = df_poll[(df_poll['device_type'] == row['device_type']) & (df_poll['device_name'] == row['device_name']) & (df_poll['device_command'] == row['device_command'])]
-                    
-                    df_poll_filtered = df_poll_filtered.sort_values(by='jd')
-                    df_poll_filtered = df_poll_filtered.set_index('jd')
-
-                    df_poll_filtered['device_value'] = df_poll_filtered['device_value'].replace({'True': 1.0, 'False': 0.0}).astype(float)
-
-                    df_inp[row['header']] = utils.interpolate_dfs(df_images_filt['jd_obs'], df_poll_filtered['device_value'])['device_value'].fillna(0)
-
-                ## update files
-                for i, row in df_images_filt.iterrows():
-                    with fits.open(row[0], mode='update') as filehandle:
-                        hdr = filehandle[0].header
-                        for header in df_inp.columns:
-                            hdr[header] = (df_inp.iloc[i][header], df_poll_unique[df_poll_unique['header'] == header]['comment'].values[0])
-                            
-                        location = EarthLocation(lat=hdr['LAT-OBS']*u.deg, lon=hdr['LONG-OBS']*u.deg, height=hdr['ALT-OBS']*u.m)
-                        target = SkyCoord(hdr['RA'], hdr['DEC'], unit=(u.deg, u.deg), frame='icrs')
+                    # interpolate polled data onto image times
+                    for i, row in df_poll_unique.iterrows():
+                        df_poll_filtered = df_poll[(df_poll['device_type'] == row['device_type']) & (df_poll['device_name'] == row['device_name']) &
+                                                    (df_poll['device_command'] == row['device_command'])]
                         
-                        utils.hdr_times(hdr, self.fits_config, location, target)
-                        filehandle[0].add_checksum()
+                        df_poll_filtered = df_poll_filtered.sort_values(by='jd')
+                        df_poll_filtered = df_poll_filtered.set_index('jd')
 
-                        self.cursor.execute(f'''UPDATE images SET complete_hdr = 1 WHERE filename="{row[0]}"''')
+                        df_poll_filtered['device_value'] = df_poll_filtered['device_value'].replace({'True': 1.0, 'False': 0.0}).astype(float)
+
+                        df_inp[row['header']] = utils.interpolate_dfs(df_images_filt['jd_obs'], df_poll_filtered['device_value'])['device_value'].fillna(0)
+
+                    # update files
+                    for i, row in df_images_filt.iterrows():
+                        with fits.open(row[0], mode='update') as filehandle:
+                            hdr = filehandle[0].header
+                            for header in df_inp.columns:
+                                hdr[header] = (df_inp.iloc[i][header], df_poll_unique[df_poll_unique['header'] == header]['comment'].values[0])
+                                
+                            location = EarthLocation(lat=hdr['LAT-OBS']*u.deg, lon=hdr['LONG-OBS']*u.deg, height=hdr['ALT-OBS']*u.m)
+                            target = SkyCoord(hdr['RA'], hdr['DEC'], unit=(u.deg, u.deg), frame='icrs')
+                            
+                            utils.hdr_times(hdr, self.fits_config, location, target)
+                            filehandle[0].add_checksum()
+
+                            self.cursor.execute(f'''UPDATE images SET complete_hdr = 1 WHERE filename="{row[0]}"''')
+            
+            self.__log('info', 'Completing headers... Done.')
         
-        self.__log('info', 'Completing headers... Done.')
+        except Exception as e:
+            self.error_source.append({'device_type': 'Headers', 'device_name': '', 'error': str(e)})
+            self.__log('error', f"Error completing headers: {e}")
 
     def monitor_action(self, device_type : str, monitor_command : str, desired_condition : any, run_command : str, 
                         device_name : str = '', run_command_type : str = '', abs_tol : float = 0, 
-                        log_message : str = '', timeout : float = 120):
+                        log_message : str = '', timeout : float = 120) -> None:
         '''
         Monitor device(s) of device_type for a given monitor_command and run_command if desired_condition is not met.
+    
+        Args:
+            device_type (str): Type of the device(s) to monitor.
+            monitor_command (str): The command to monitor on the device(s).
+            desired_condition (any): The desired condition that should be met.
+            run_command (str): The command to run if the desired_condition is not met.
+            device_name (str, optional): Name of the specific device to monitor (default '').
+            run_command_type (str, optional): Type of run command ('set' or 'get') (default '').
+            abs_tol (float, optional): Absolute tolerance for comparing conditions (default 0).
+            log_message (str, optional): Custom log message that runs if conditions not initially met (default '').
+            timeout (float, optional): Maximum time to monitor before timing out (default 120 seconds).
+
         '''
         # TODO: improve logging
+        # TODO: add weather_safe and error_free as optional check conditions?
         start_time = time.time()
 
         self.__log("debug", f"Monitor action: {device_type} {monitor_command} {desired_condition} {run_command} {run_command_type} {abs_tol} {log_message} {timeout}")
@@ -1794,7 +2102,15 @@ class Astra():
             self.__log("error", f"{device_type} not found in observatory.")
             raise ValueError(f"{device_type} not found in observatory.")
     
-    def queue_get(self):
+    def queue_get(self) -> None:
+        '''
+        Retrieve and process items from the queue until it's stopped.
+
+        This method continuously retrieves items from the queue and processes them based on their type.
+        If the type is 'query', it executes the SQL query provided in the item's data.
+        If the type is 'log', it logs the data and appends errors to the error_source if applicable.
+
+        '''
 
         while self.queue_running:
             try:

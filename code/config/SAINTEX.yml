@@ -3,6 +3,7 @@ Telescope:
     ip: 10.211.55.3:11111
     device_number: 0
     alt_limit: 20
+    pointing_threshold: 0.1 # arcmins
     guider:
       PIX2TIME: 
         '+x': 61.77

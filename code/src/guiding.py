@@ -82,7 +82,7 @@ class Guider():
         self.create_tables() # this is assuming we're using the same db.  Should we have a separate one for guiding?
 
         # set up the image glob string
-        self.reference_dir = '../images/autoguider_ref'
+        self.reference_dir = os.path.join('..', 'images', 'autoguider_ref')
 
         # pulseGuide conversions
         self.PIX2TIME = params['PIX2TIME']
@@ -271,34 +271,34 @@ class Guider():
             Path to the logfile
         log_list : array like
             List of items to log, see order of items below:
-            night : string
-                Date of the night
-            ref : string
-                Name of the current reference image
-            check : string
-                Name of the current guide image
-            stabilised : string
-                Telescope stabilised yet? (y | n)
-            shift_x : float
-                Raw shift measured in X direction
-            shift_y : float
-                Raw shift measured in Y direction
-            pre_pid_X : float
-                X correction sent to the PID loop
-            pre_pid_y : float
-                Y correction sent to the PID loop
-            post_pid_X : float
-                X correction sent to the mount, post PID loop
-            post_pid_y : float
-                Y correction sent to the mount, post PID loop
-            std_buff_x : float
-                Sttdev of X AG value buffer
-            std_buff_y : float
-                Sttdev of Y AG value buffer
-            culled_max_shift_x : string
-                Culled X measurement if > max allowed shift (y | n)
-            culled_max_shift_y : string
-                Culled Y measurement if > max allowed shift (y | n)
+        night : string
+            Date of the night
+        ref : string
+            Name of the current reference image
+        check : string
+            Name of the current guide image
+        stabilised : string
+            Telescope stabilised yet? (y | n)
+        shift_x : float
+            Raw shift measured in X direction
+        shift_y : float
+            Raw shift measured in Y direction
+        pre_pid_X : float
+            X correction sent to the PID loop
+        pre_pid_y : float
+            Y correction sent to the PID loop
+        post_pid_X : float
+            X correction sent to the mount, post PID loop
+        post_pid_y : float
+            Y correction sent to the mount, post PID loop
+        std_buff_x : float
+            Sttdev of X AG value buffer
+        std_buff_y : float
+            Sttdev of Y AG value buffer
+        culled_max_shift_x : string
+            Culled X measurement if > max allowed shift (y | n)
+        culled_max_shift_y : string
+            Culled Y measurement if > max allowed shift (y | n)
         header : boolean
             Flag to set writing the log file header. This is done
             at the start of the night only
@@ -507,7 +507,7 @@ class Guider():
         if not result:
             ref_image = None
         else:
-            ref_image = "{}/{}".format(self.reference_dir, result[0][0])
+            ref_image = os.path.join(self.reference_dir, result[0][0])
         return ref_image
     
     def setReferenceImage(self, field, filt, exptime, ref_image, telescope):
@@ -539,12 +539,12 @@ class Guider():
             VALUES
             ('%s', '%s', '%s', '%s', '%s', '%s')
             """
-        qry_args = (field, telescope, ref_image.split('/')[-1], filt, exptime, tnow)
+        qry_args = (field, telescope, os.path.split(ref_image)[-1], filt, exptime, tnow)
         self.cursor.execute(qry%qry_args)
 
         # copy the file to the autoguider_ref location
-        print(ref_image, "{}/{}".format(self.reference_dir, ref_image.split('/')[-1]))
-        copyfile(ref_image, "{}/{}".format(self.reference_dir, ref_image.split('/')[-1]))
+        print(ref_image, os.path.join(self.reference_dir, os.path.split(ref_image)[-1]))
+        copyfile(ref_image, os.path.join(self.reference_dir, os.path.split(ref_image)[-1]))
 
     def waitForImage(self, n_images, camera_name, glob_str):
         """
@@ -649,7 +649,7 @@ class Guider():
                         # set the previous reference image
                         if not ref_file:
                             self.setReferenceImage(current_field, current_filter, current_exptime, last_file, camera_name)
-                            ref_file = "{}/{}".format(self.reference_dir, last_file.split('/')[-1])
+                            ref_file = os.path.join(self.reference_dir, os.path.basename(last_file))
                 except IOError:
                     self.logMessageToDb(camera_name, "Problem opening {}...".format(last_file))
                     continue
@@ -757,7 +757,7 @@ class Guider():
                                 self.logMessageToDb(camera_name, 'SHIFT NOT APPLIED, TELESCOPE *NOT* CONNECTED, EXITING')
                                 self.running = False
 
-                        log_list = [glob_str.split('/')[-2],
+                        log_list = [os.path.split(glob_str)[-2],
                                     os.path.split(ref_file)[1],
                                     check_file,
                                     stabilised,

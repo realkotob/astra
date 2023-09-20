@@ -5,6 +5,9 @@ temp
 *.fits
 code/src/frontend/*.jpg
 
+# pointing catalog
+code/src/*.db
+
 # DS_Store
 .DS_Store
 
