@@ -62,4 +62,4 @@ SafetyMonitor:
     ip: 10.211.55.3:11111
     device_number: 0
 Misc:
-  Webcam: http://localhost:8889/proxied
+  Webcam: http://localhost:8889/SAINTEX

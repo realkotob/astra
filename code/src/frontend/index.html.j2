@@ -96,10 +96,9 @@
                                 </div>
 
                             {# webcam feed #}
-                                <div class="basis-1/2 ml-2 ">
+                                <div class="flex basis-1/2 ml-2 justify-center">
                                     {% if webcamfeeds != {} %}
-                                        {# webcam #}
-                                        <iframe src="/video/{{observatory}}/" scrolling="no"></iframe>
+                                        <iframe src="/video/{{observatory}}/" class="w-full rounded-lg aspect-square"></iframe>
                                     {% endif %}
                                 </div>
                             </div>
