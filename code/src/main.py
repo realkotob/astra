@@ -14,7 +14,7 @@ import time
 
 import uvicorn
 from fastapi import FastAPI, Request, WebSocket
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 import httpx
@@ -126,6 +126,25 @@ async def favicon():
 async def lastest_image(image: str):
     return FileResponse(f'./frontend/{image}')
 
+from io import BytesIO
+
+@app.get("/video2/{observatory}/{filename:path}", include_in_schema=False)
+async def get_video(request: Request, observatory, filename : str = None):
+    headers = request.headers
+    base_url = webcamfeeds[observatory]
+    target_url = f"{base_url}/{filename}"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(target_url, headers=headers)
+        content = response.content
+        status_code = response.status_code
+        headers = response.headers
+
+    if filename.endswith('.mp4'):
+        return StreamingResponse(BytesIO(content), status_code=status_code, headers=headers, media_type='video/mp4')
+    else:
+        return HTMLResponse(content, status_code=status_code, headers=headers)
+
 @app.get("/video/{observatory}/{filename:path}", include_in_schema=False)
 async def get_video(request: Request, observatory, filename : str = None):
     headers = request.headers
@@ -208,7 +227,7 @@ async def stop(observatory: str):
 async def interrupt(observatory: str):
     obs = observatories[observatory]
 
-    obs.toggle_interrupt_thread()
+    obs.start_toggle_interrupt()
 
     return {"status": "success", "data": "null", "message": ""}
 

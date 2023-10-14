@@ -139,6 +139,9 @@ class Astra():
 
         self.devices = self.load_devices()
         self.last_image = None
+        
+        self.run_backup = True
+        self.backup_time = datetime.strptime(self.observatory['Misc']['backup_time'], '%H:%M')
 
         # for each telescope, create a donuts guider
         self.guider = {}
@@ -222,6 +225,48 @@ class Astra():
         cursor.execute(db_command_2)
 
         return cursor
+    
+    def backup(self) -> None:
+        """
+        Backs up the database tables of previous 24 hours into csv files.
+
+        Checks if disk drive is filling up 
+        """
+
+        try:
+            self.run_backup = False
+
+            # check disk space
+            disk_usage = psutil.disk_usage('/')
+            if disk_usage.percent > 90:
+                self.__log('warning', f"Disk usage {disk_usage.percent}% is high")
+
+                # TODO: action
+
+            dt_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            db_name = os.path.join('..', 'log', f'{self.observatory_name}.db')
+
+            # create backup directory if not exists
+            if not os.path.exists(os.path.join('..', 'log', 'archive')):
+                os.makedirs(os.path.join('..', 'log', 'archive'))
+
+            tables = ['polling', 'log', 'images', 'autoguider_ref', 
+                    'autoguider_log_new', 'autoguider_info_log']
+            
+            for table in tables:
+                # backup table
+                df = pd.read_sql_query(f"SELECT * FROM {table} WHERE datetime > datetime('now', '-1 days')", db_name)
+                df.to_csv(os.path.join('..', 'log', 'archive', f'{self.observatory_name}_{table}_{dt_str}.csv'), index=False)
+
+                # once back up complete, delete rows older than 3 days ago from database
+                # to minimize database size for speed
+                self.cursor.execute(f"DELETE FROM {table} WHERE datetime < datetime('now', '-3 days')")
+
+            self.run_backup = True
+        
+        except Exception as e:
+            self.error_source.append({'device_type': 'Backup', 'device_name': 'backup', 'error': str(e)})
+            self.__log('error', f"Error backing up database: {str(e)}")
 
     def read_config(self, config_filename : str) -> dict:
         """
@@ -422,8 +467,8 @@ class Astra():
         else:
             self.__log('warning', 'No safety monitor found')
 
-        # observatory closed flag, used to prevent multiple logging of weather unsafe and closing observatory
-        closed = False
+        # observatory weather_warning flag, used to prevent multiple logging of weather unsafe
+        weather_warning = False
         
         while self.watchdog_running:
 
@@ -461,7 +506,7 @@ class Astra():
                     try:
                         schedule_mtime = os.path.getmtime(self.schedule_path)
 
-                        if schedule_mtime > self.schedule_mtime:
+                        if (schedule_mtime > self.schedule_mtime) and (self.schedule_running is False):
                             self.__log('warning', 'Schedule updated')
                             self.schedule = self.read_schedule()
                     except Exception as e:
@@ -521,55 +566,47 @@ class Astra():
                                 self.__log('error', f"Safety monitor {last_update}s stale")
                                 continue
                         
-
+                        # action if weather unsafe
                         if sm_poll['IsSafe']['value'] is False:
 
                             self.weather_safe = False
                             
-                            # log message saying weather unsafe and close observatory
-                            if closed is False:
+                            # log message saying weather unsafe
+                            if weather_warning is False:
                                 self.__log('warning', 'Weather unsafe')
-                                # self.__log('info', 'Closing observatory')
 
                             # may want to close dome before park telescope?
                             self.close_observatory() # checks if already closed and closes if not
-                            closed = True
+                            weather_warning = True
 
-                            ## TODO: kill certain threads?
-
-
-                    if self.schedule_running is False:
-                        # TODO: Smarter logic
-                        
-                        if 'SafetyMonitor' in self.observatory:
-                            if self.truncate_schedule is True:
-                                rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
-                            else:
-                                rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
-
+                        # check weather history for weather unsafe
+                        if self.truncate_schedule is True:
+                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
                         else:
-                            rows = []
+                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
 
-                        self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last 1 minutes")
+                    else:
+                        rows = []
+
+                    self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last 1 minutes")
+                    
+                    # if no weather unsafe in last 30 minutes, weather is "safe"
+                    if len(rows) == 0:
+                        self.weather_safe = True
+                        weather_warning = False # reset weather_warning flag
                         
-                        # if no weather unsafe in last 30 minutes, start schedule
-                        if len(rows) == 0:
-                            self.weather_safe = True
-                            closed = False # reset closed flag, but should be smarter than this.
-                            
+                    # check schedule is running
+                    if self.schedule_running is False:
+                        
                         # start schedule - if weather is not safe, only calibration sequences will run
                         if self.schedule.iloc[-1]['end_time'] > datetime.utcnow():
                             
-                            if self.truncate_schedule is False:
-                                self.schedule = self.read_schedule()
-
-                            self.schedule_running = True
                             th = Thread(target=self.run_schedule, daemon = True)
                             th.start()
                             self.threads.append({'type': 'run_schedule', 'device_name': 'Schedule', 'thread': th, 'id' : 'schedule'})
 
-
                 except Exception as e:
+                    self.error_source.append({'device_type': 'Watchdog', 'device_name': 'watchdog', 'error': str(e)})
                     self.__log('error', f"Error during watchdog check: {str(e)}")
 
             else:
@@ -625,11 +662,24 @@ class Astra():
                                 pass
                             case 'Headers':
                                 pass
+                            case 'Watchdog':
+                                pass
+                            case 'Backup':
+                                pass
                             case _:
                                 pass
                 except Exception as e:
                     self.__log('error', f"Error during error handling: {str(e)}")
                     # TODO: Panic mode
+
+            # run backup once a day
+            if datetime.utcnow().hour == self.backup_time.hour and datetime.utcnow().minute == self.backup_time.minute and self.run_backup:
+
+                # run backup in separate thread
+                th = Thread(target=self.backup, daemon = True)
+                th.start()
+
+                self.threads.append({'type': 'Backup', 'device_name': 'backup', 'thread': th, 'id' : 'backup'})
 
             time.sleep(0.5) # twice the safety monitor polling time
 
@@ -748,7 +798,7 @@ class Astra():
                 self.monitor_action('Dome', 'ShutterStatus', 1, 'CloseShutter',
                                         log_message = "Closing Dome shutter(s)")
 
-    def toggle_interrupt_thread(self) -> None:
+    def start_toggle_interrupt(self) -> None:
         '''
         Starts a new thread to handle user interrupt.
 
@@ -880,6 +930,8 @@ class Astra():
                 if self.truncate_schedule is True:
                     schedule = update_times(schedule, 100)
 
+                schedule['completed'] = False
+
                 self.__log('info', 'Schedule read')
 
                 self.schedule_mtime = schedule_mtime
@@ -907,6 +959,9 @@ class Astra():
         to the next item in the schedule.
  
         '''
+        self.schedule_running = True
+        self.__log('info', 'Running schedule')
+
         t0 = time.time()
         while self.weather_safe is None and (time.time() - t0) < 120:
             self.__log('info', 'Waiting for safety conditions to be checked')
@@ -917,57 +972,43 @@ class Astra():
             self.__log('error', 'Weather safety check timed out')
             return False
 
-        self.__log('info', 'Running schedule')
-        self.schedule_running = True
-        for i, row in self.schedule.iterrows():
+        while self.schedule_running and self.error_free and (self.interrupt is False):
 
-            # run if weather safe, or the action is calibration (bias, dark)
-            if (self.weather_safe is True) or (row['action_type'] in ['calibration']):
+            # loop through self.threads and remove the ones that are dead
+            for j in self.threads:
+                if j['thread'].is_alive() is False:
+                    self.threads.remove(j)
 
-                # loop through self.threads and remove the ones that are dead due to finishing or weather getting to them?
-                for j in self.threads:
-                    if j['thread'].is_alive() is False:
-                        self.threads.remove(j)
+            # create list of running thread ids
+            ids = [k['id'] for k in self.threads]
 
-                ids = [k['id'] for k in self.threads]
+            # loop through schedule
+            for i, row in self.schedule.iterrows():
 
-                # if not running, start thread
-                if i not in ids:
-                    run_row = True
-                    while run_row and self.schedule_running and ((self.weather_safe is True) or (row['action_type'] in ['calibration'])) and self.error_free and (self.interrupt is False):
-                        t = datetime.utcnow()
-                        
-                        if row['start_time'] >= t:
+                # if schedule item not running, start thread if conditions are met
+                t = datetime.utcnow()
+                if (i not in ids) \
+                    and (row['start_time'] <= t) and (row['end_time'] >= t) \
+                    and ((self.weather_safe is True) or (row['action_type'] in ['calibration'])) \
+                    and (row['completed'] is False) and self.schedule_running and self.error_free \
+                    and (self.interrupt is False):
+
+                    th = Thread(target=self.run_action, args=(row,), daemon=True)
+                    th.start()
+
+                    self.threads.append({'type': row['action_type'], 'device_name': row['device_name'], 'thread': th, 'id' : i})
+                    
+                    # if open or close, wait for thread to finish before continuing
+                    if row['action_type'] in ['open', 'close']:
+                        # wait for thread to finish
+                        while (th.is_alive() is True) and self.weather_safe and self.schedule_running and self.error_free and (self.interrupt is False):
                             time.sleep(1)
 
-                        elif (row['start_time'] <= t) and (row['end_time'] >= t):
+            # exit while loop if reached end of schedule
+            if (self.schedule.iloc[-1]['end_time'] < datetime.utcnow()):
+                break
 
-                            th = Thread(target=self.run_action, args=(row,), daemon=True)
-                            th.start()
-
-                            self.threads.append({'type': row['action_type'], 'device_name': row['device_name'], 'thread': th, 'id' : i})
-                            
-                            # if open or close, wait for thread to finish before continuing
-                            if row['action_type'] in ['open', 'close']:
-                                # wait for thread to finish
-                                while (th.is_alive() is True) and self.weather_safe and self.schedule_running and self.error_free and (self.interrupt is False):
-                                    time.sleep(1)
-
-                            run_row = False
-
-                            # if last row, sleep until thread is finished to prevent from returning to start of schedule by watchdog
-                            if i == self.schedule.index[-1]:
-                                while (th.is_alive() is True) and (self.weather_safe or (row['action_type'] in ['calibration'])) and self.schedule_running and self.error_free and (self.interrupt is False):
-                                    time.sleep(1)
-                                self.__log('info', f"Waiting for last schedule item to reach endtime of {row['end_time']}: {row['device_name']} {row['action_type']}")
-                                while ((self.weather_safe is True) or (row['action_type'] in ['calibration'])) and self.schedule_running and self.error_free and (self.interrupt is False):
-                                    t_until_end = (row['end_time'] - datetime.utcnow()).total_seconds()
-                                    if t_until_end > 0:
-                                        time.sleep(1)
-                                    else:
-                                        break
-                        else:
-                            run_row = False
+            time.sleep(1)
 
         # run headers completion
         if self.schedule_running and self.error_free and (self.interrupt is False):
@@ -978,7 +1019,7 @@ class Astra():
 
         self.schedule_running = False
         self.__log('info', 'Schedule stopped')
-        
+
     def run_action(self, row : dict) -> None:
         '''
         Execute the action specified in the schedule.
@@ -1008,10 +1049,31 @@ class Astra():
 
             if 'object' == row['action_type']:
                 self.object_sequence(row, paired_devices)
+
+                # set 'completed' flag to True if ended under normal conditions
+                if self.weather_safe and self.error_free and (self.interrupt is False) \
+                    and self.schedule_running and self.watchdog_running: 
+
+                    self.schedule[row.name]['completed'] = True
+                
             elif 'calibration' == row['action_type']:
                 self.calibration_sequence(row, paired_devices)
+
+                # set 'completed' flag to True if ended under normal conditions (without weather check)
+                if self.error_free and (self.interrupt is False) \
+                    and self.schedule_running and self.watchdog_running:
+
+                    self.schedule[row.name]['completed'] = True
+
             elif 'flats' == row['action_type']:
                 self.flats_sequence(row, paired_devices)
+
+                # set 'completed' flag to True if ended under normal conditions
+                if self.weather_safe and self.error_free and (self.interrupt is False) \
+                    and self.schedule_running and self.watchdog_running: 
+
+                    self.schedule[row.name]['completed'] = True
+
             elif 'open' == row['action_type']:
                 if 'Camera' in self.observatory:
                     # turn camera cooler on
@@ -1034,6 +1096,8 @@ class Astra():
                     # open all dome(s) and unpark telescope(s)
                     self.open_observatory()
 
+                # no need to set 'completed' flag for open/close actions as they should always run
+
             elif 'close' == row['action_type']:
                 if 'Camera' in self.observatory:
                     # close dome and park telescope
@@ -1041,6 +1105,8 @@ class Astra():
                 else:
                     # close all dome(s) and park telescope(s)
                     self.close_observatory()
+
+                # no need to set 'completed' flag for open/close actions as they should always run
 
             else: 
                 # if not 'object' or 'calibration' or 'flats', assume it's an ASCOM command
@@ -1057,6 +1123,9 @@ class Astra():
                         
                 else:
                     raise ValueError(f"Invalid action_type: {row['device_name']} {row['action_type']} with {row['action_value']} is not a valid method or property for {row['device_type']} {row['device_name']}")
+        
+                self.schedule[row.name]['completed'] = True
+        
         except Exception as e:
             self.schedule_running = False
             self.__log('error', f"Run action error: {str(e)}")

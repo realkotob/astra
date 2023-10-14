@@ -63,3 +63,4 @@ SafetyMonitor:
     device_number: 0
 Misc:
   Webcam: http://localhost:8889/SAINTEX
+  backup_time: 12:00
