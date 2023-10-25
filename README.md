@@ -40,8 +40,7 @@ conda env create -f environment.yml
 
 ```
 conda activate astra
-cd code/src
-uvicorn main:app --reload --port 8000
+python code/src/main.py --truncate # truncate is for testing locally, it brings the schedule to present day and shortens it 100x.
 ```
 
 5. Open the browser and go to `http://localhost:8000/` to access Astra.
