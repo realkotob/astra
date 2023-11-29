@@ -83,8 +83,8 @@ def convert_fits_to_jpg(fits_file, observatory):
         headers['EXPTIME'] = hdulist[0].header['EXPTIME']
         headers['DATE-OBS'] = hdulist[0].header['DATE-OBS']
         headers['FILTER'] = hdulist[0].header['FILTER']
-        headers['IMGTYPE'] = hdulist[0].header['IMGTYPE']
-        if headers['IMGTYPE'] == 'Light':
+        headers['IMAGETYP'] = hdulist[0].header['IMAGETYP']
+        if headers['IMAGETYP'] == 'Light':
             headers['OBJECT'] = hdulist[0].header['OBJECT']
 
     # Normalize the image data to the 8-bit range (0-255)
@@ -92,14 +92,16 @@ def convert_fits_to_jpg(fits_file, observatory):
     vmin, vmax = interval.get_limits(image_data)
 
     # delete previous jpgs
-    for file in glob(f'./frontend/*{observatory}*.jpg'):
+    old_img_path = os.path.join('frontend', f'*{observatory}*.jpg')
+    for file in glob(old_img_path):
         os.remove(file)
         
     # Save the jpg image
-    filename = './frontend/' + fits_file.split('/')[-1].split('.')[0] + '.jpg'
-    plt.imsave(filename, image_data, format="jpg", cmap="gray", vmin=vmin, vmax=vmax)
+    filename = os.path.splitext(os.path.basename(fits_file))[0] + '.jpg'
+    filepath = os.path.join('frontend', filename)
+    plt.imsave(filepath, image_data, format="jpg", cmap="gray", vmin=vmin, vmax=vmax)
 
-    return filename, headers
+    return filepath, headers
 
 
 @asynccontextmanager
@@ -120,15 +122,16 @@ async def root(request: Request):
 
 @app.get('/favicon.svg', include_in_schema=False)
 async def favicon():
-    return FileResponse('./frontend/favicon.svg')
+    return FileResponse(os.path.join('frontend', 'favicon.svg'))
 
 @app.get('/js/{file}', include_in_schema=False)
 async def js(file : str):
-    return FileResponse(f'./frontend/js/{file}')
+    return FileResponse(os.path.join('frontend', 'js', file))
+
 
 @app.get('/frontend/{image}', include_in_schema=False)
 async def lastest_image(image: str):
-    return FileResponse(f'./frontend/{image}')
+    return FileResponse(os.path.join('frontend', image))
 
 from io import BytesIO
 
@@ -288,7 +291,7 @@ async def schedule(observatory: str):
 @app.get("/api/db/polling/{observatory}/{device_type}")
 async def polling(observatory: str, device_type: str):
     
-    db = sqlite3.connect('../log/' + observatory + '.db')
+    db = sqlite3.connect(os.path.join('..', 'log', observatory + '.db'))
 
     q = f"""SELECT * FROM polling WHERE device_type = '{device_type}' AND datetime > datetime('now', '-1 day')"""
 
@@ -316,7 +319,7 @@ async def websocket_log(websocket: WebSocket, observatory: str):
     await websocket.accept()
     obs = observatories[observatory]
 
-    db = sqlite3.connect('../log/' + observatory + '.db')
+    db = sqlite3.connect(os.path.join('..', 'log', observatory + '.db'))
     
     q = """SELECT * FROM (SELECT * FROM log ORDER BY datetime DESC LIMIT 1000) a ORDER BY datetime ASC"""
     initial_df = pd.read_sql_query(q, db)
@@ -364,7 +367,7 @@ async def websocket_log(websocket: WebSocket, observatory: str):
 async def websocket_weather(websocket: WebSocket, observatory: str):
     # this + frontend need work...
     await websocket.accept()
-    db = sqlite3.connect('../log/' + observatory + '.db')
+    db = sqlite3.connect(os.path.join('..', 'log', observatory + '.db'))
     
     # TODO: change to limit instead of datetime
     q = """SELECT * FROM polling WHERE device_type = 'ObservingConditions' AND datetime > datetime('now', '-1 day')"""
@@ -486,7 +489,8 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                   {"item": "weather safe" , "value" : "safe" if obs.weather_safe else "unsafe"},
                   {"item": "interrupt" , "value" : "on" if obs.interrupt else "off"},
                   {"item": "error source" , "value" : "none" if len(obs.error_source) == 0 else "hover to see", "error_source": obs.error_source},
-                  {"item": "threads" , "value" : len(threads), "threads": threads}]
+                  {"item": "threads" , "value" : len(threads), "threads": threads},
+                  {"item": "percent safe" , "value" : f'{obs.percent_safe:.0f} %'}]
 
         if 'Telescope' in obs.devices:
             # we want to know if slewing or tracking
@@ -508,6 +512,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                     pass
 
                 last_update = (dt_now - dt).total_seconds()
+                last_update = last_update if last_update > 0 else 0
 
                 valid = None
                 # convert datetime to string and check if polled values are valid
@@ -547,6 +552,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                 dt = polled['ShutterStatus']['datetime']
 
                 last_update = (dt_now - dt).total_seconds()
+                last_update = last_update if last_update > 0 else 0
 
                 valid = None
                 # convert datetime to string and check if polled values are valid
@@ -579,6 +585,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                 dt = polled['Position']['datetime']
 
                 last_update = (dt_now - dt).total_seconds()
+                last_update = last_update if last_update > 0 else 0
 
                 valid = None
                 # convert datetime to string and check if polled values are valid
@@ -618,6 +625,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                 dt = polled['CameraState']['datetime']
 
                 last_update = (dt_now - dt).total_seconds()
+                last_update = last_update if last_update > 0 else 0
 
                 valid = None
                 # convert datetime to string and check if polled values are valid
@@ -641,6 +649,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                 dt = polled['Position']['datetime']
 
                 last_update = (dt_now - dt).total_seconds()
+                last_update = last_update if last_update > 0 else 0
 
                 valid = None
                 # convert datetime to string and check if polled values are valid
@@ -662,6 +671,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                 dt = polled['Temperature']['datetime']
 
                 last_update = (dt_now - dt).total_seconds()
+                last_update = last_update if last_update > 0 else 0
 
                 valid = None
                 status = None
@@ -696,6 +706,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                 dt = polled['IsSafe']['datetime']
 
                 last_update = (dt_now - dt).total_seconds()
+                last_update = last_update if last_update > 0 else 0
 
                 # convert datetime to string and check if polled values are valid
                 for key in polled:

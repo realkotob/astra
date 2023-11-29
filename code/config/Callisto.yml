@@ -1,5 +1,5 @@
 Telescope:
-  - device_name: telescope_SAINTEX
+  - device_name: telescope_Callisto
     ip: 10.211.55.3:11111
     device_number: 0
     alt_limit: -420
@@ -23,17 +23,17 @@ Telescope:
         'set_y': 0.0
       WAIT_TIME: 10
 Focuser:
-  - device_name: focuser_SAINTEX
+  - device_name: focuser_Callisto
     ip: 10.211.55.3:11111
     ip_old: localhost:8001
     device_number: 0
     focus_pos: 10000
 Dome:
-  - device_name: dome_SAINTEX
+  - device_name: dome_Callisto
     ip: 10.211.55.3:11111
     device_number: 0
 Camera:
-  - device_name: camera_SAINTEX
+  - device_name: camera_Callisto
     ip: 127.0.0.1:8080
     device_number: 0
     temperature: -20
@@ -43,24 +43,24 @@ Camera:
       lower_exptime_limit: 0.1
       upper_exptime_limit: 10
     paired_devices: 
-      Telescope: telescope_SAINTEX
-      Focuser: focuser_SAINTEX
-      FilterWheel: fw_SAINTEX
-      ObservingConditions: weather_SAINTEX
-      SafetyMonitor: safety_SAINTEX
-      Dome: dome_SAINTEX
+      Telescope: telescope_Callisto
+      Focuser: focuser_Callisto
+      FilterWheel: fw_Callisto
+      ObservingConditions: weather_Callisto
+      SafetyMonitor: safety_Callisto
+      Dome: dome_Callisto
 FilterWheel:
-  - device_name: fw_SAINTEX
+  - device_name: fw_Callisto
     ip: 10.211.55.3:11111 
     device_number: 0
 ObservingConditions:
-  - device_name: weather_SAINTEX
+  - device_name: weather_Callisto
     ip: 10.211.55.3:11111
     device_number: 0
 SafetyMonitor:
-  - device_name: safety_SAINTEX
+  - device_name: safety_Callisto
     ip: 10.211.55.3:11111
     device_number: 0
 Misc:
-  # Webcam: http://localhost:8889/SAINTEX
+  # Webcam: http://localhost:8889/Callisto
   backup_time: '12:00'

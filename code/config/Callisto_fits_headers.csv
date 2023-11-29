@@ -80,6 +80,7 @@ FALSE,float,FALSE,DEWPOINT,ObservingConditions,DewPoint,
 FALSE,float,FALSE,HUMIDITY,ObservingConditions,Humidity,[%] Ambient atmospheric humidity
 FALSE,float,FALSE,AMBTEMP,ObservingConditions,Temperature,
 FALSE,float,FALSE,WINDSPD,ObservingConditions,WindSpeed,
+FALSE,float,FALSE,SKYTEMP,ObservingConditions,SkyTemperature,
 FALSE,str,TRUE,OBC-DNAM,ObservingConditions,Name,The short name of the ObservingConditions driver
 FALSE,str,TRUE,OBC-DVER,ObservingConditions,DriverVersion,ObservingConditions driver version
 ,,,,,,

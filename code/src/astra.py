@@ -23,6 +23,9 @@ import sqlite3
 
 from multiprocessing import Manager
 
+sql3wlogger = logging.getLogger("sqlite3worker")
+sql3wlogger.setLevel(logging.INFO)
+
 ASTRA_VER = '0.2.0'
 
 def update_times(df, time_factor):
@@ -124,6 +127,7 @@ class Astra():
         self.error_free = True
         self.error_source = []
         self.weather_safe = None
+        self.percent_safe = 0
 
         self.watchdog_running = False
         self.schedule_running = False
@@ -591,11 +595,16 @@ class Astra():
                     else:
                         rows = []
 
-                    self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last 1 minutes")
+                    if self.truncate_schedule:
+                        self.percent_safe = (1 - (len(rows) / 60)) * 100
+                    else:
+                        self.percent_safe = (1 - (len(rows) / 3600)) * 100
+
+                    self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last {'1' if self.truncate_schedule else '60'} minutes")
                     
                     # if no weather unsafe in last 60 minutes, weather is "safe"
                     if len(rows) == 0 and weather_warning is True:
-                        self.__log('info', 'Weather safe for the last 60 minutes')
+                        self.__log('info', f"Weather safe for the last {'1' if self.truncate_schedule else '60'} minutes")
 
                     if len(rows) == 0:
                         self.weather_safe = True
@@ -934,7 +943,7 @@ class Astra():
 
                 # For development: Truncate the schedule if self.truncate_schedule is True
                 if self.truncate_schedule is True:
-                    schedule = update_times(schedule, 100)
+                    schedule = update_times(schedule, 10)
 
                 schedule['completed'] = False
 
@@ -1027,10 +1036,10 @@ class Astra():
                     
                     # if open or close, wait for thread to finish before continuing
                     # TODO: use join?
-                    if row['action_type'] in ['open', 'close']:
-                        # wait for thread to finish
-                        while (th.is_alive() is True) and self.check_conditions(row):
-                            time.sleep(1)
+                    # if row['action_type'] in ['open', 'close']:
+                    # wait for thread to finish
+                    while (th.is_alive() is True) and self.check_conditions(row):
+                        time.sleep(1)
 
             # exit while loop if reached end of schedule
             if (self.schedule.iloc[-1]['end_time'] < datetime.utcnow()):
@@ -1187,9 +1196,9 @@ class Astra():
         hdr = self.base_header(paired_devices, action_value)
         
         if 'object' == row['action_type']:
-            hdr['IMGTYPE'] = 'Light'
+            hdr['IMAGETYP'] = 'Light'
         elif 'flats' == row['action_type']:
-            hdr['IMGTYPE'] = 'Flat'
+            hdr['IMAGETYP'] = 'Flat'
 
         self.__log('debug', f"Finished pre_sequence for {row['device_name']} {row['action_type']} {row['action_value']}")
 
@@ -1365,11 +1374,11 @@ class Astra():
                 hdr['EXPTIME'] = exptime
 
                 if exptime == 0:
-                    hdr['IMGTYPE'] = 'Bias'
+                    hdr['IMAGETYP'] = 'Bias'
                 else:
-                    hdr['IMGTYPE'] = 'Dark'
+                    hdr['IMAGETYP'] = 'Dark'
                 
-                self.__log('info', f"Exposing {count + 1}/{action_value['n'][i]} {row['device_name']} {hdr['IMGTYPE']} for exposure time {hdr['EXPTIME']} s")
+                self.__log('info', f"Exposing {count + 1}/{action_value['n'][i]} {row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']} s")
                 camera.get('StartExposure', Duration = exptime, Light = False)
             
                 while (count < action_value['n'][i]) and self.check_conditions(row):
@@ -1394,7 +1403,7 @@ class Astra():
 
                         if count < action_value['n'][i]:
                             # start next exposure
-                            self.__log('info', f"Exposing {count + 1}/{action_value['n'][i]} {row['device_name']} {hdr['IMGTYPE']} for exposure time {hdr['EXPTIME']} s")
+                            self.__log('info', f"Exposing {count + 1}/{action_value['n'][i]} {row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']} s")
                             camera.get('StartExposure', Duration = exptime, Light = False)
 
         self.__log('info', f"Calibration sequence ended for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
@@ -1436,7 +1445,7 @@ class Astra():
 
         maxadu = camera.get('MaxADU')
         
-        self.__log('info', f"Exposing {row['device_name']} {hdr['IMGTYPE']} for exposure time {hdr['EXPTIME']} s")
+        self.__log('info', f"Exposing {row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']} s")
         camera.get('StartExposure', Duration = action_value['exptime'], Light = True)
 
         pointing_complete = False
@@ -1520,7 +1529,7 @@ class Astra():
 
                 # start next exposure
                 self.__log('debug', f"Exposing {row['device_name']} again")
-                self.__log('info', f"Exposing {row['device_name']} {hdr['IMGTYPE']} for exposure time {hdr['EXPTIME']} s")
+                self.__log('info', f"Exposing {row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']} s")
                 camera.get('StartExposure', Duration = action_value['exptime'], Light = True)
 
         # stop guiding at end of sequence
@@ -1597,7 +1606,27 @@ class Astra():
         obs_location = EarthLocation(lat=obs_lat*u.deg, lon=obs_lon*u.deg, height=obs_alt*u.m)
 
         # wait for sun to be in right position
-        take_flats = False
+        sun_rising, take_flats, sun_altaz = utils.is_sun_rising(obs_location)
+
+        if self.check_conditions(row) and (take_flats is False):
+            self.__log('info', f"Not the right time to take flats for {row['device_name']}, sun at {sun_altaz.alt.degree:.2f} degrees and {'rising' if sun_rising else 'setting'}")
+
+            # calculate time until sun is in right position of between -1 and -10 degrees altitude
+            if sun_rising:
+                # angle between sun_altaz.alt.degree and -10
+                angle = -10 - sun_altaz.alt.degree
+            else:
+                # angle between sun_altaz.alt.degree and -1
+                angle = sun_altaz.alt.degree + 1
+
+            # time until sun is in right position
+            time_to_wait = angle / 0.25 # 0.25 degrees per minute
+
+            if time_to_wait < 0:
+                time_to_wait = 24*60 + time_to_wait
+
+            self.__log('info', f"Waiting {time_to_wait:.2f} minutes for sun to be in right position for {row['device_name']}")
+ 
         while self.check_conditions(row) and (take_flats is False):
             sun_rising, take_flats, sun_altaz = utils.is_sun_rising(obs_location)
 
@@ -1620,7 +1649,7 @@ class Astra():
                 self.flats_position(obs_location, paired_devices, row)
                 
                 # establishing initial exposure time
-                exptime = self.flats_exptime(paired_devices, row, numx, numy, 
+                exptime = self.flats_exptime(obs_location, paired_devices, row, numx, numy, 
                                                 startx, starty, target_adu, offset,
                                                 lower_exptime_limit, upper_exptime_limit)
                 
@@ -1660,9 +1689,14 @@ class Astra():
                             self.flats_position(obs_location, paired_devices, row)
                             
                             # get new exposure time since moved
-                            exptime = self.flats_exptime(paired_devices, row, numx, numy, 
+                            exptime = self.flats_exptime(obs_location, paired_devices, row, numx, numy, 
                                                             startx, starty, target_adu, offset,
                                                             lower_exptime_limit, upper_exptime_limit, exptime=exptime)
+                            
+                            if exptime < lower_exptime_limit or exptime > upper_exptime_limit:
+                                self.__log('info', "Moving on...")
+                                continue
+
                             t_last_move = datetime.utcnow()
 
                         else:
@@ -1691,6 +1725,9 @@ class Astra():
                             camera.get('StartExposure', Duration = exptime, Light = True)
 
             else:
+                if take_flats is False:
+                    self.__log('info', f"Not the right time to take flats for {row['device_name']}, sun at {sun_altaz.alt.degree} degrees and {'rising' if sun_rising else 'setting'}")
+
                 self.__log('info', "Moving on...")
                 break
     
@@ -1754,7 +1791,7 @@ class Astra():
                                         device_name = paired_devices['Telescope'],
                                         log_message = f"Setting Telescope {paired_devices['Telescope']} tracking to True")
                 
-    def flats_exptime(self, paired_devices : dict, row : dict, numx : int, numy : int, startx : int, starty : int, target_adu : list,
+    def flats_exptime(self, obs_location : EarthLocation, paired_devices : dict, row : dict, numx : int, numy : int, startx : int, starty : int, target_adu : list,
                         offset : float, lower_exptime_limit : float, upper_exptime_limit : float, exptime : float = None) -> float:
         '''
         Set the exposure time for flat field calibration images.
@@ -1764,6 +1801,7 @@ class Astra():
         pixel subframes to speed up the process.
 
         Parameters:
+            obs_location (EarthLocation): The location of the observatory.
             paired_devices (dict): A dictionary specifying paired devices, including 'Camera' for the camera device.
             row (dict): A dictionary containing timing information for the flat field calibration.
             numx (int): The original number of pixels in the X-axis of the camera sensor.
@@ -1781,7 +1819,10 @@ class Astra():
             exptime (float): The adjusted exposure time in seconds that meets the target ADU level within the specified limits.
 
         '''
-        if 'Camera' in paired_devices:
+
+        sun_rising, take_flats, sun_altaz = utils.is_sun_rising(obs_location)
+
+        if ('Camera' in paired_devices) and self.check_conditions(row) and take_flats:
             
             camera = self.devices['Camera'][paired_devices['Camera']]
 
@@ -1801,7 +1842,7 @@ class Astra():
             
             # initial exposure time guess
             if exptime is None:
-                exptime = lower_exptime_limit
+                exptime = lower_exptime_limit + (upper_exptime_limit / 4)
 
             self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {exptime} s")
             camera.get('StartExposure', Duration = exptime, Light = True)
@@ -1816,25 +1857,46 @@ class Astra():
                     arr = camera.get('ImageArray')
                     median_adu = np.nanmedian(arr)
                     fraction = (median_adu - offset) / (target_adu[0] - offset)
+
+                    sun_rising, take_flats, sun_altaz = utils.is_sun_rising(obs_location)
   
-                    if math.isclose(target_adu[0], median_adu, rel_tol=0, abs_tol=target_adu[1]) is False:
+                    if math.isclose(target_adu[0], median_adu, rel_tol=0, abs_tol=target_adu[1]) is False and take_flats is True:
                         exptime = exptime / fraction
 
                         if exptime > upper_exptime_limit:
+
                             self.__log('warning', f"Exposure time of {exptime}s needed for next flat is greater than user defined limit of {upper_exptime_limit}s")
-                            getting_exptime = False
+
+                            if sun_rising is True:
+                                self.__log('info', f"Sun is rising, waiting 10s to try again. Sun is at {sun_altaz.alt.degree} degrees.")
+                                time.sleep(10)
+                                self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {upper_exptime_limit}s")
+                                camera.get('StartExposure', Duration = upper_exptime_limit, Light = True)
+                            else:
+                                self.__log('info', f"Sun is setting. Sun at {sun_altaz.alt.degree} degrees.")
+                                getting_exptime = False
+
                         elif exptime < lower_exptime_limit:
-                            self.__log('warning', f"Exposure time of {exptime}s needed for next flat is lower than user defined limit of {lower_exptime_limit}s. Will try again in 10s")
-                            getting_exptime = False
-                            # time.sleep(10)
-                            # self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {lower_exptime_limit}s")
-                            # camera.get('StartExposure', Duration = lower_exptime_limit, Light = True)
+
+                            self.__log('warning', f"Exposure time of {exptime}s needed for next flat is lower than user defined limit of {lower_exptime_limit}s")
+
+                            if sun_rising is False:
+                                self.__log('info', f"Sun is setting, waiting 10s to try again. Sun is at {sun_altaz.alt.degree} degrees.")
+                                time.sleep(10)
+                                self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {lower_exptime_limit}s")
+                                camera.get('StartExposure', Duration = lower_exptime_limit, Light = True)
+                            else:
+                                self.__log('info', f"Sun is rising. Sun at {sun_altaz.alt.degree} degrees.")
+                                getting_exptime = False
+
                         else:
                             # start next exposure to check if correct?
-                            self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {exptime}s")
+                            self.__log('info', f"Exposing subframe of {paired_devices['Camera']} for exposure time {exptime}s to check if correct exposure time")
                             camera.get('StartExposure', Duration = exptime, Light = True)
 
                     else:
+                        if take_flats is True:
+                            self.__log('info', f"Exposure time of {exptime}s needed for next flat is within user defined tolerance")
                         getting_exptime = False
 
                 
@@ -1934,12 +1996,12 @@ class Astra():
 
         hdu = fits.PrimaryHDU(nda, header=hdr)
 
-        if hdr['IMGTYPE'] == 'Light':
+        if hdr['IMAGETYP'] == 'Light':
             filename = f"{device.device_name}_{hdr['FILTER']}_{hdr['OBJECT']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
-        elif hdr['IMGTYPE'] in ['Bias', 'Dark']:
-            filename = f"{device.device_name}_{hdr['IMGTYPE']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+        elif hdr['IMAGETYP'] in ['Bias', 'Dark']:
+            filename = f"{device.device_name}_{hdr['IMAGETYP']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
         else:
-            filename = f"{device.device_name}_{hdr['FILTER']}_{hdr['IMGTYPE']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+            filename = f"{device.device_name}_{hdr['FILTER']}_{hdr['IMAGETYP']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
         
         filepath = os.path.join('..', 'images', folder, filename)
 

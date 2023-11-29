@@ -38,25 +38,38 @@
                         </div>
 
                         <div title="Schedule">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 mr-2 cursor-pointer transition ease-in-out duration-150" id="schedule-icon-{{ observatory }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 m-2 cursor-pointer transition ease-in-out duration-150" id="schedule-icon-{{ observatory }}">
                                 <path d="M12.75 12.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7.5 15.75a.75.75 0 100-1.5.75.75 0 000 1.5zM8.25 17.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM9.75 15.75a.75.75 0 100-1.5.75.75 0 000 1.5zM10.5 17.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12 15.75a.75.75 0 100-1.5.75.75 0 000 1.5zM12.75 17.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM14.25 15.75a.75.75 0 100-1.5.75.75 0 000 1.5zM15 17.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM16.5 15.75a.75.75 0 100-1.5.75.75 0 000 1.5zM15 12.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM16.5 13.5a.75.75 0 100-1.5.75.75 0 000 1.5z" />
                                 <path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clip-rule="evenodd" />
                             </svg>
                         </div>
 
+                        <div class="border-r-2 border-neutral-500 border-opacity-50 mx-2">&nbsp;</div>
+
+                        <div title="Weather">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor" class="w-6 h-6 transition ease-in-out duration-150" id="weather-safe-icon-{{ observatory }}">
+                                <path d="M288 0c17.7 0 32 14.3 32 32V49.7C451.8 63.4 557.7 161 573.9 285.9c2 15.6-17.3 24.4-27.8 12.7C532.1 283 504.8 272 480 272c-38.7 0-71 27.5-78.4 64.1c-1.7 8.7-8.7 15.9-17.6 15.9s-15.8-7.2-17.6-15.9C359 299.5 326.7 272 288 272s-71 27.5-78.4 64.1c-1.7 8.7-8.7 15.9-17.6 15.9s-15.8-7.2-17.6-15.9C167 299.5 134.7 272 96 272c-24.8 0-52.1 11-66.1 26.7C19.4 310.4 .1 301.5 2.1 285.9C18.3 161 124.2 63.4 256 49.7V32c0-17.7 14.3-32 32-32zm0 304c12.3 0 23.5 4.6 32 12.2V430.6c0 45-36.5 81.4-81.4 81.4c-30.8 0-59-17.4-72.8-45l-2.3-4.7c-7.9-15.8-1.5-35 14.3-42.9s35-1.5 42.9 14.3l2.3 4.7c3 5.9 9 9.6 15.6 9.6c9.6 0 17.4-7.8 17.4-17.4V316.2c8.5-7.6 19.7-12.2 32-12.2z"/>
+                            </svg>
+                        </div>
+
                         <div title="Watchdog">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 mr-2 cursor-pointer transition ease-in-out duration-150" id="watchdog-icon-{{ observatory }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 m-2 transition ease-in-out duration-150" id="watchdog-icon-{{ observatory }}">
                                 <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
                                 <path fill-rule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clip-rule="evenodd" />
                             </svg>
                         </div>
 
-                        <div title="UTC time" id="time-{{observatory}}" class="mr-4 font-mono text-sm text-gray-500">
+
+                        <div title="UTC time" id="time-{{observatory}}" class="font-mono text-sm text-gray-500 m-2">
                         </div>
                     </div>
                 </div>
 
             </div>
+
+            {# <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                <div class="bg-blue-600 h-2.5 rounded-full" style="width: 95%"></div>
+            </div> #}
                 
             {# nav #}
             <div class="flex-initial">
@@ -99,7 +112,10 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" id="summary-last-image-placeholder-{{ observatory }}" viewBox="0 0 24 24" fill="currentColor" class="w-full p-12 opacity-20">
                                         <path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 6v12a2.25 2.25 0 01-2.25 2.25H3.75A2.25 2.25 0 011.5 18V6zM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0021 18v-1.94l-2.69-2.689a1.5 1.5 0 00-2.12 0l-.88.879.97.97a.75.75 0 11-1.06 1.06l-5.16-5.159a1.5 1.5 0 00-2.12 0L3 16.061zm10.125-7.81a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0z" clip-rule="evenodd" />
                                     </svg>
-                                    <div id="summary-last-image-text-{{ observatory }}" class="opacity-0 hover:opacity-80 bg-black duration-100 absolute inset-0 flex justify-center items-center text-white"></div>
+                                    <div class="flex opacity-0 hover:opacity-80 bg-black duration-100 absolute h-full w-full text-white justify-center items-center">
+                                        <div id="summary-last-image-text-{{ observatory }}" class="whitespace-break-spaces">
+                                        </div>
+                                    </div>
                                 </div>
 
                             {# webcam feed #}
@@ -136,6 +152,7 @@
                             </div>
                             
                         {% elif nav == 'Controls' %}
+
                             <div class="flex flex-col flex-grow place-content-center items-center my-auto">
                                 <div class="grid grid-cols-2 gap-4 md:w-3/6 sm:w-full my-4">
                                     <button class="text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5 transition ease-in-out duration-150" 
@@ -611,7 +628,7 @@
                         watchdog_icon.classList.add('hover:text-red-600');
                         watchdog_icon.classList.remove('text-green-500');
                         watchdog_icon.classList.remove('hover:text-green-400');
-                        watchdog_icon.onclick = function() { startWatchdog(observatory); };
+                        //watchdog_icon.onclick = function() { startWatchdog(observatory); };
 
                         watchdog_control.classList.add('text-red-700');
                         watchdog_control.classList.remove('text-green-500');
@@ -621,7 +638,7 @@
                         watchdog_icon.classList.remove('hover:text-red-600');
                         watchdog_icon.classList.add('text-green-500');
                         watchdog_icon.classList.add('hover:text-green-400');
-                        watchdog_icon.onclick = function() { stopWatchdog(observatory); };
+                        //watchdog_icon.onclick = function() { stopWatchdog(observatory); };
 
                         watchdog_control.classList.remove('text-red-700');
                         watchdog_control.classList.add('text-green-500');
@@ -661,8 +678,57 @@
                     
                 }
 
-                // remove first item of table1, error free status
-                message['table1'].shift();
+                // update weather safe icon
+                if (message['table1'][4]['item'] == "weather safe"){
+
+                    let weather_safe_icon = document.getElementById("weather-safe-icon-" + observatory);
+
+                    if (message['table1'][4]['value'] == "unsafe") {
+                        weather_safe_icon.classList.add('text-red-700');
+                        weather_safe_icon.classList.add('hover:text-red-600');
+                        weather_safe_icon.classList.remove('text-green-500');
+                        weather_safe_icon.classList.remove('hover:text-green-400');
+
+
+                    } else {
+                        weather_safe_icon.classList.remove('text-red-700');
+                        weather_safe_icon.classList.remove('hover:text-red-600');
+                        weather_safe_icon.classList.add('text-green-500');
+                        weather_safe_icon.classList.add('hover:text-green-400');
+                    }
+
+                }
+
+                // loop through rows of schedule table and change color of row that matches thread id
+                if (message['table1'][7]['item'] == "threads") {
+
+                    let threads = message['table1'][7]['threads'];
+                    let table = document.getElementById("schedule-table-0-" + observatory);
+                    let rows = table.getElementsByTagName("tr");
+
+                    for (let i = 0; i < rows.length; i++) {
+                        rows[i].classList.remove('bg-slate-600');
+                    }
+
+                    // loop through threads and find id that are numeric
+                    for (let i = 0; i < threads.length; i++) {
+                        if (!isNaN(threads[i]['id'])) {
+                            rows[threads[i]['id'] + 1].classList.add('bg-slate-600');
+                        }
+                    }
+
+                }
+
+                // make summary table 1 smaller if error free
+                if (message['table1'][0]['item'] == "error free"){
+                    if (message['table1'][0]['value'] == true) {
+                        // remove error free status
+                        message['table1'].splice(0, 1);
+                        // remove weather safe, interrupt, error source
+                        message['table1'].splice(3, 3);
+                    } 
+                }
+
                 updateTable("summary-table-1-" + observatory, message['table1'], {"item": "item", "value": "value"}, false);
 
                 // update last image
@@ -740,7 +806,7 @@
             // update weather chart
             updateWeatherChart('{{observatory}}', update=false);
 
-            // todo: move to websocket
+            // todo: move to websocket?
             setInterval(function() {
                 updateWeatherChart('{{observatory}}', update=true);
             }, 60000);

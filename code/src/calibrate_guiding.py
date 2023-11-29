@@ -92,7 +92,7 @@ def takeImageWithMaxIm(camera_object : Camera, image_path, filter_id=2,
     hdr = fits.Header()
     hdr['FILTER'] = ('none', 'Filter name')
     hdr['EXPTIME'] = (exptime, 'Exposure time (s)')
-    hdr['IMGTYPE'] = ('Light', 'Image type')
+    hdr['IMAGETYP'] = ('Light', 'Image type')
 
     save_image(camera_object, hdr, dateobs, maxadu, image_path)
 

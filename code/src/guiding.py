@@ -82,6 +82,10 @@ class Guider():
         self.create_tables() # this is assuming we're using the same db.  Should we have a separate one for guiding?
 
         # set up the image glob string
+        # create reference directory if not exists
+        if not os.path.exists(os.path.join('..', 'images', 'autoguider_ref')):
+            os.makedirs(os.path.join('..', 'images', 'autoguider_ref'))
+
         self.reference_dir = os.path.join('..', 'images', 'autoguider_ref')
 
         # pulseGuide conversions
@@ -781,6 +785,7 @@ class Guider():
                         templist = g.glob(glob_str)
                         n_images = len(templist)
         except Exception as e:
+            self.running = False
             self.__log('error', f"Error in guide loop: {str(e)}")
 
         self.__log('info', f"Stopping guider loop for: {glob_str} images")

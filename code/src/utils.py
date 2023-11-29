@@ -205,12 +205,9 @@ def is_sun_rising(obs_location):
         sun_rising = False
     
     flat_ready = False
-    if sun_rising:
-        if sun_altaz0.alt.deg > -10 and sun_altaz0.alt.deg < -1:
-            flat_ready = True
-    else:
-        if sun_altaz0.alt.deg < -1:
-            flat_ready = True
+    
+    if sun_altaz0.alt.deg > -10 and sun_altaz0.alt.deg < -1:
+        flat_ready = True
 
     return sun_rising, flat_ready, sun_altaz0
 
