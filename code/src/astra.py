@@ -1331,9 +1331,25 @@ class Astra():
         else:
             return False
 
-    def perform_exposure(self, camera, exptime, row, hdr, log_option=None, maximal_sleep_time=0.01):
-        """Perform camera exposure, log information, and wait for image to be ready."""
-        # TODO waiting dynamically
+    def perform_exposure(
+        self, camera, exptime, row, hdr, use_light=True, log_option=None, maximal_sleep_time=0.01
+    ) -> bool:
+        """Perform camera exposure, log information, and wait for image to be ready.
+        Parameters
+        ----------
+        use_light : bool, optional
+            Whether to use light during the exposure (default is True).
+        log_option : str or None, optional
+            Additional information for logging (default is None, adding nothing).
+        maximal_sleep_time : float, optional
+            The maximum sleep time in seconds during the waiting process (default is 0.01).
+
+        Returns
+        -------
+        bool
+            True if the exposure was successful, False otherwise.        
+        """
+        # TODO consider waiting dynamically
         # def wait_for_image_ready(exptime):
         # """"
         # Dynamical alternative to time.sleep(min(maximal_sleep_time, exptime / 10))
@@ -1348,7 +1364,8 @@ class Astra():
         #         else:
         #             time.sleep(min(0.5, exptime*0.9/2))
 
-        time.sleep(0)  # yield to other threads
+        # Yield to other threads
+        time.sleep(0)
 
         # Log information about the exposure
         log_option_tmp = "" if log_option is None else f"{log_option} "
@@ -1359,13 +1376,22 @@ class Astra():
         )
 
         # Start exposure
-        camera.get("StartExposure", Duration=exptime, Light=False)
+        camera.get("StartExposure", Duration=exptime, Light=use_light)
 
         # Wait for the image to be ready
-        while not camera.get("ImageReady") and self.check_conditions(row):
+        exposure_successful = True
+        while not camera.get("ImageReady"):
+            if not self.check_conditions(row):
+                exposure_successful = False
+                break
             time.sleep(min(maximal_sleep_time, exptime / 10))
 
-        self.__log("debug", f"Image ready from {row['device_name']} to download.")
+        if not exposure_successful:
+            self.__log("warning", "Exposure was unsuccessful, as check_conditions() returned False.")
+        else:
+            self.__log("debug", f"Image ready from {row['device_name']} to download.")            
+        
+        return exposure_successful
 
     def get_last_exposure_start_time(self, camera, device_name):
         # get last exposure start time
@@ -1404,7 +1430,6 @@ class Astra():
                 - The schedule is stopped.
                 - The watchdog process is terminated.
         '''
-
         self.__log('info', f"Running calibration sequence for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
 
         action_value, folder, hdr = self.pre_sequence(row, paired_devices)
@@ -1414,14 +1439,29 @@ class Astra():
         maxadu = camera.get('MaxADU')
 
         for i, exptime in enumerate(action_value['exptime']):
+            if not self.check_conditions(row):
+                break
+
+            hdr['EXPTIME'] = exptime
+            if exptime == 0:
+                hdr['IMAGETYP'] = 'Bias'
+            else:
+                hdr['IMAGETYP'] = 'Dark'
+            
             number_of_expsosures = action_value['n'][i]
 
             for exposure in range(number_of_expsosures):
-                return_bool = self.perform_exposure(
-                    camera, exptime, row, hdr, maximal_sleep_time=0.01,
-                    log_option=f'{exposure + 1}/{number_of_expsosures}'
-                )
-                if not return_bool:
+                log_option = f'{exposure + 1}/{number_of_expsosures}'
+                if not self.perform_exposure(
+                    camera, exptime, row, hdr, use_light=False,
+                    maximal_sleep_time=0.01,
+                    log_option=log_option
+                ):
+                    self.__log(
+                        'warning', 
+                        f"Exposure loop broke at exposure {log_option} "
+                        "with an exposure time of {exptime} s for {row['device_name']}."
+                    )
                     break
 
                 t0 = datetime.utcnow()
@@ -1430,9 +1470,12 @@ class Astra():
                 # save image
                 self.__log('debug', f"Saving image from {row['device_name']}")
                 self.save_image(camera, hdr, dateobs, t0, maxadu, folder)
-
-        self.__log('info', f"Calibration sequence ended for {row['device_name']}, starting {row['start_time']} and ending {row['end_time']}")
-
+                
+        self.__log(
+            'info', 
+            f"Calibration sequence ended for {row['device_name']}, "
+            f"starting {row['start_time']} and ending {row['end_time']}"
+        )
 
     def calibration_sequence(self, row : dict, paired_devices : dict) -> None:
         '''
