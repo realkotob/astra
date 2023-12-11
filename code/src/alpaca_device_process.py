@@ -188,7 +188,12 @@ class AlpacaDevice(Process):
                 except Exception as e:
                     time.sleep(0)
                     self.queue.put((self.metadata, {"type" : "log", "data" : ("warning", f'Get method failed with data {str(data)}: {self.device_type}, {self.device_name}, {method}, {str(e)}, trying again...')}))
-                    time.sleep(1)
+                    
+                    if self._poll_pause:
+                        time.sleep(30)
+                    else:
+                        time.sleep(1)
+
                     continue
                 time.sleep(0)
 
