@@ -33,21 +33,21 @@ Camera:
     device_number: 0
     temperature: -60
     flats:
-      target_adu: [45000, 3000]
+      target_adu: [31500, 10500]
       bias_offset: 300
-      lower_exptime_limit: 0.1
-      upper_exptime_limit: 10
+      lower_exptime_limit: 2
+      upper_exptime_limit: 15
     paired_devices: 
       Telescope: telescope_Callisto
       Focuser: focuser_Callisto
-      Dome: dome_Callisto
+      # Dome: dome_Callisto
       FilterWheel: fw_Callisto
       ObservingConditions: weather_Callisto
       SafetyMonitor: safety_Callisto
-Dome:
-  - device_name: dome_Callisto
-    ip: localhost:11111
-    device_number: 0
+# Dome:
+#   - device_name: dome_Callisto
+#     ip: localhost:11111
+#     device_number: 0
 FilterWheel:
   - device_name: fw_Callisto
     ip: localhost:11111 

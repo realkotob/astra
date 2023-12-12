@@ -184,7 +184,7 @@ class AlpacaDevice(Process):
                                 data = data(**kwargs)
 
                         if self.debug:
-                            self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method} with data {str(data)}')}))
+                            self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method}')}))
                 except Exception as e:
                     time.sleep(0)
                     self.queue.put((self.metadata, {"type" : "log", "data" : ("warning", f'Get method failed with data {str(data)}: {self.device_type}, {self.device_name}, {method}, {str(e)}, trying again...')}))
@@ -205,7 +205,7 @@ class AlpacaDevice(Process):
                         data = data(**kwargs)
 
                 if self.debug:
-                    self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method}, with data {str(data)}')}))
+                    self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Get method success: {self.device_type}, {self.device_name}, {method}')}))
 
             time.sleep(0)
 
