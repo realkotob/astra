@@ -227,7 +227,38 @@ class AlpacaDevice(Process):
     def set__(self, method, value):
         ## property setter
         try:
-            data = setattr(self.device, method, value)
+            # permit 3 attempts
+            data = "not set"
+            if self.debug:
+                self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Setting method: {self.device_type}, {self.device_name}, {method}')}))
+
+            for i in range(2):
+                try:
+                    if data == "not set":
+                        data = setattr(self.device, method, value)
+
+                        if self.debug:
+                            self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Set method success: {self.device_type}, {self.device_name}, {method} with data {str(data)}')}))
+                except Exception as e:
+                    time.sleep(0)
+                    self.queue.put((self.metadata, {"type" : "log", "data" : ("warning", f'Set method failed with data {str(data)}: {self.device_type}, {self.device_name}, {method}, {str(e)}, trying again...')}))
+                    
+                    if self._poll_pause:
+                        time.sleep(30)
+                    else:
+                        time.sleep(1)
+
+                    continue
+                time.sleep(0)
+
+            # final run. If error, caught by try/except 
+            if data == "not set":
+                data = setattr(self.device, method, value)
+
+                if self.debug:
+                    self.queue.put((self.metadata, {"type" : "log", "data" : ("debug", f'Set method success: {self.device_type}, {self.device_name}, {method}, with data {str(data)}')}))
+
+            time.sleep(0)
             self.back_pipe.send(data) # check if valid, need args?
         except Exception as e:
             self.queue.put((self.metadata, {"type" : "log", "data" : ('error', f'Set method error: {self.device_type}, {self.device_name}, {method}, {str(e)}')}))
