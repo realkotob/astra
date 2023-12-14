@@ -155,14 +155,14 @@
 
                             <div class="flex flex-col flex-grow place-content-center items-center my-auto">
                                 <div class="grid grid-cols-2 gap-4 md:w-3/6 sm:w-full my-4">
-                                    <button class="text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5 transition ease-in-out duration-150" 
+                                    {# <button class="text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5 transition ease-in-out duration-150" 
                                         id="watchdog-control-{{observatory}}">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-1/2 h-1/2 mx-auto" id="watchdog-icon-{{ observatory }}">
                                             <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
                                             <path fill-rule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clip-rule="evenodd" />
                                         </svg>
                                         <span>Watchdog</span>
-                                    </button>
+                                    </button> #}
 
                                     <button class="text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5 transition ease-in-out duration-150" 
                                         id="schedule-control-{{observatory}}">
@@ -173,13 +173,13 @@
                                         <span>Schedule</span>
                                     </button>
 
-                                    <button class="text-white/50 text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5" 
+                                    {# <button class="text-white/50 text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5" 
                                         onclick="openObservatory('{{observatory}}')">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-1/2 h-1/2 mx-auto">
                                             <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm.53 5.47a.75.75 0 00-1.06 0l-3 3a.75.75 0 101.06 1.06l1.72-1.72v5.69a.75.75 0 001.5 0v-5.69l1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clip-rule="evenodd" />
                                         </svg>
                                         <span>Open observatory</span>
-                                    </button>
+                                    </button> #}
                                     <button class="text-white/50 text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5" 
                                         onclick="closeObservatory('{{observatory}}')">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-1/2 h-1/2 mx-auto">
@@ -621,7 +621,7 @@
                 if (message['table1'][2]['item'] == "watchdog"){
 
                     let watchdog_icon = document.getElementById("watchdog-icon-" + observatory);
-                    let watchdog_control = document.getElementById("watchdog-control-" + observatory);
+                    // let watchdog_control = document.getElementById("watchdog-control-" + observatory);
 
                     if (message['table1'][2]['value'] == "stopped") {
                         watchdog_icon.classList.add('text-red-700');
@@ -630,9 +630,9 @@
                         watchdog_icon.classList.remove('hover:text-green-400');
                         //watchdog_icon.onclick = function() { startWatchdog(observatory); };
 
-                        watchdog_control.classList.add('text-red-700');
-                        watchdog_control.classList.remove('text-green-500');
-                        watchdog_control.onclick = function() { startWatchdog(observatory); };
+                        // watchdog_control.classList.add('text-red-700');
+                        // watchdog_control.classList.remove('text-green-500');
+                        // watchdog_control.onclick = function() { startWatchdog(observatory); };
                     } else {
                         watchdog_icon.classList.remove('text-red-700');
                         watchdog_icon.classList.remove('hover:text-red-600');
@@ -640,9 +640,9 @@
                         watchdog_icon.classList.add('hover:text-green-400');
                         //watchdog_icon.onclick = function() { stopWatchdog(observatory); };
 
-                        watchdog_control.classList.remove('text-red-700');
-                        watchdog_control.classList.add('text-green-500');
-                        watchdog_control.onclick = function() { stopWatchdog(observatory); };
+                        // watchdog_control.classList.remove('text-red-700');
+                        // watchdog_control.classList.add('text-green-500');
+                        // watchdog_control.onclick = function() { stopWatchdog(observatory); };
                     }
 
                 }
