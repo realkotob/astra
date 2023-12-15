@@ -154,7 +154,7 @@ def time_conversion(jd, location, target):
 def hdr_times(hdr, fits_config, location, target):
     dateobs = pd.to_datetime(hdr['DATE-OBS'])
 
-    dateend = dateobs + timedelta(seconds=hdr['EXPTIME'])
+    dateend = dateobs + timedelta(seconds=float(hdr['EXPTIME']))
     jd = to_jd(dateobs)
     jdend = to_jd(dateend)
 

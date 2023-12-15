@@ -36,7 +36,7 @@ Camera:
       target_adu: [31500, 10500]
       bias_offset: 300
       lower_exptime_limit: 6
-      upper_exptime_limit: 30
+      upper_exptime_limit: 60
     paired_devices: 
       Telescope: telescope_Callisto
       Focuser: focuser_Callisto

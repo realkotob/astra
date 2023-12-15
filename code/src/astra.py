@@ -569,7 +569,7 @@ class Astra():
             self.heartbeat['memory_percent'] = psutil.virtual_memory().percent
             self.heartbeat['disk_percent'] = psutil.disk_usage('/').percent
             self.heartbeat['threads'] = [{'type': i['type'], 'device_name': i['device_name'], 'id' : i['id']} for i in self.threads]
-
+            ## TODO add dome & telescope status
 
             if self.error_free is True:
                 try:      
@@ -1832,7 +1832,7 @@ class Astra():
             # calculate time until sun is in right position of between -1 and -10 degrees altitude
             if sun_rising:
                 # angle between sun_altaz.alt.degree and -10
-                angle = -10 - sun_altaz.alt.degree
+                angle = -12 - sun_altaz.alt.degree
             else:
                 # angle between sun_altaz.alt.degree and -1
                 angle = sun_altaz.alt.degree + 1
