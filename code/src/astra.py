@@ -617,7 +617,7 @@ class Astra():
                         if self.truncate_schedule is True:
                             rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
                         else:
-                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-60 minutes')")
+                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
 
                     else:
                         rows = []
@@ -629,9 +629,9 @@ class Astra():
 
                     self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last {'1' if self.truncate_schedule else '60'} minutes")
                     
-                    # if no weather unsafe in last 60 minutes, weather is "safe"
+                    # if no weather unsafe in last 30 minutes, weather is "safe"
                     if len(rows) == 0 and weather_warning is True:
-                        self.__log('info', f"Weather safe for the last {'1' if self.truncate_schedule else '60'} minutes")
+                        self.__log('info', f"Weather safe for the last {'1' if self.truncate_schedule else '30'} minutes")
 
                     if len(rows) == 0:
                         self.weather_safe = True
