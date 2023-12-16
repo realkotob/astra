@@ -445,7 +445,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                   {"item": "interrupt" , "value" : "on" if obs.interrupt else "off"},
                   {"item": "error source" , "value" : "none" if len(obs.error_source) == 0 else "hover to see", "error_source": obs.error_source},
                   {"item": "threads" , "value" : len(threads), "threads": threads},
-                  {"item": "percent safe" , "value" : f'{obs.percent_safe:.2f} %'}]
+                  {"item": "time to safe" , "value" : f'{obs.time_to_safe:.2f} mins'}]
 
         if 'Telescope' in obs.devices:
             # we want to know if slewing or tracking

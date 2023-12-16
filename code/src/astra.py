@@ -129,7 +129,7 @@ class Astra():
         self.error_free = True
         self.error_source = []
         self.weather_safe = None
-        self.percent_safe = 0
+        self.time_to_safe = 0
 
         self.watchdog_running = False
         self.schedule_running = False
@@ -622,10 +622,24 @@ class Astra():
                     else:
                         rows = []
 
-                    if self.truncate_schedule:
-                        self.percent_safe = (1 - (len(rows) / 60)) * 100
-                    else:
-                        self.percent_safe = (1 - (len(rows) / 3600)) * 100
+                    try:
+                        if self.truncate_schedule:
+                            if len(rows) > 0:
+                                last_datetime = rows[-1][4]
+                                time_diff = datetime.utcnow() - pd.to_datetime(last_datetime, format='%Y-%m-%d %H:%M:%S.%f')
+                                self.time_to_safe = 1 - time_diff.total_seconds()/60
+                            else:
+                                self.time_to_safe = 0
+                        else:
+                            if len(rows) > 0:
+                                last_datetime = rows[-1][4]
+                                time_diff = datetime.utcnow() - pd.to_datetime(last_datetime, format='%Y-%m-%d %H:%M:%S.%f')
+                                self.time_to_safe = 30 - time_diff.total_seconds()/60
+                            else:
+                                self.time_to_safe = 0
+                    except Exception as e:
+                        self.__log('warning', f"Issue in parsing datetime during time_to_safe check: {str(e)}")
+
 
                     self.__log('debug', f"Watchdog: {len(rows)} instances of weather unsafe found in last {'1' if self.truncate_schedule else '60'} minutes")
                     
