@@ -28,7 +28,7 @@ from multiprocessing import Manager
 sql3wlogger = logging.getLogger("sqlite3worker")
 sql3wlogger.setLevel(logging.INFO)
 
-ASTRA_VER = '0.2.2'
+ASTRA_VER = '0.2.3'
 
 def update_times(df, time_factor):
     '''
