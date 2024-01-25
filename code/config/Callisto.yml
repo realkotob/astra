@@ -1,6 +1,6 @@
 Telescope:
   - device_name: telescope_Callisto
-    ip: localhost:11111
+    ip: 10.211.55.3:11111
     device_number: 0
     pointing_threshold: 0.06 # arcmins
     guider:
@@ -23,12 +23,12 @@ Telescope:
       WAIT_TIME: 10
 Focuser:
   - device_name: focuser_Callisto
-    ip: localhost:11111
+    ip: 10.211.55.3:11111
     device_number: 0
     focus_pos: 6955
 Camera:
   - device_name: camera_Callisto
-    ip: localhost:11111
+    ip: 10.211.55.3:11111
     device_number: 0
     temperature: -60
     temperature_tolerance: 1
@@ -46,20 +46,20 @@ Camera:
       SafetyMonitor: safety_Callisto
 Dome:
   - device_name: dome_Callisto
-    ip: localhost:11111
+    ip: 10.211.55.3:11111
     device_number: 0
 FilterWheel:
   - device_name: fw_Callisto
-    ip: localhost:11111 
+    ip: 10.211.55.3:11111 
     device_number: 0
 ObservingConditions:
   - device_name: weather_Callisto
-    ip: localhost:11111
+    ip: 10.211.55.3:11111
     device_number: 0
 SafetyMonitor:
   - device_name: safety_Callisto
-    ip: localhost:11111
+    ip: 10.211.55.3:11111
     device_number: 0
 Misc:
-  Webcam: http://172.16.0.198:8888/inside
+  # Webcam: http://172.16.0.198:8888/inside
   backup_time: '12:00'
