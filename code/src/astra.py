@@ -326,11 +326,6 @@ class Astra():
                                                                               self.queue, 
                                                                               self.debug)
 
-                        # devices[device_type][d['device_name']] = AscomDevice(device_type, 
-                        #                                                       d['device_name'], 
-                        #                                                       d['ascom_name'],
-                        #                                                       self.queue, 
-                        #                                                       self.debug)
                         devices[device_type][d['device_name']].start()
                     except Exception as e:
                         self.error_source.append({'device_type': device_type, 'device_name': d['device_name'], 'error': str(e)})
@@ -522,6 +517,12 @@ class Astra():
         # initial safety monitor check
         if 'SafetyMonitor' in self.observatory:
 
+            try:
+                time_to_safe = self.observatory['SafetyMonitor'][0]['time_to_safe']
+            except KeyError as e:
+                self.__log('warning', "Error reading time_to_safe from config, defaulting to 30 minutes.")
+                time_to_safe = 30
+
             self.__log('info', 'Safety monitor found')
 
             device_type = 'SafetyMonitor'
@@ -618,7 +619,7 @@ class Astra():
                         if self.truncate_schedule is True:
                             rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')")
                         else:
-                            rows = self.cursor.execute("SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-30 minutes')")
+                            rows = self.cursor.execute(f"SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-{time_to_safe} minutes')")
 
                     else:
                         rows = []
@@ -635,7 +636,7 @@ class Astra():
                             if len(rows) > 0:
                                 last_datetime = rows[-1][4]
                                 time_diff = datetime.utcnow() - pd.to_datetime(last_datetime, format='%Y-%m-%d %H:%M:%S.%f')
-                                self.time_to_safe = 30 - time_diff.total_seconds()/60
+                                self.time_to_safe = time_to_safe - time_diff.total_seconds()/60
                             else:
                                 self.time_to_safe = 0
                     except Exception as e:
@@ -646,7 +647,7 @@ class Astra():
                     
                     # if no weather unsafe in last 30 minutes, weather is "safe"
                     if len(rows) == 0 and weather_warning is True:
-                        self.__log('info', f"Weather safe for the last {'1' if self.truncate_schedule else '30'} minutes")
+                        self.__log('info', f"Weather safe for the last {'1' if self.truncate_schedule else f'{time_to_safe}'} minutes")
 
                     if len(rows) == 0:
                         self.weather_safe = True
