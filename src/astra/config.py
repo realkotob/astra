@@ -48,7 +48,7 @@ class Config:
         """Folder where image files are stored."""
         return self.folder_assets / "images"
 
-    def check_assets_folders(self, names, exist_ok=True):
+    def check_assets_folders(self, *names, exist_ok=True):
         """Check if the assets folders exist, if not create them, i.e.
         telescope, schedule, log. Base folder is defined in the config file as
         ``folder_assets``.
@@ -81,17 +81,20 @@ class Config:
         FileExistsError
             If the file already exists and `exist_ok` is False.
         """
-        if self.file_config.exists() and not exist_ok:
-            raise FileExistsError("Config file already exists")
-        else:
-            config = {
-                "folder_assets": str(Path(__file__).parent.parent.parent / "assets"),
-                "gaia_db": None,
-            }
+        if not self.file_config.exists():
+            if not exist_ok:
+                raise FileExistsError("Config file already exists")
+            else:
+                config = {
+                    "folder_assets": str(
+                        Path(__file__).parent.parent.parent / "assets"
+                    ),
+                    "gaia_db": None,
+                }
 
-            with open(self.file_config, "w") as file:
-                yaml.dump(config, file)
-                print(f"Config file created at {self.file_config}")
+                with open(self.file_config, "w") as file:
+                    yaml.dump(config, file)
+                    print(f"Config file created at {self.file_config}")
 
     def load_config(self):
         """Load the config file."""
