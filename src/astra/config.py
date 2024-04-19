@@ -21,12 +21,12 @@ class Config:
     def __init__(self):
         self.folder_config.mkdir(exist_ok=True)
         self.config = self.load_config()
-        self.check_assets_folders("log", "schedule", "telescope", "temp", "images")
+        self.check_assets_folders("log", "schedule", "observatory", "temp", "images")
 
     @property
-    def folder_telescope(self):
+    def folder_observatory(self):
         """Folder where telescope configuration are stored."""
-        return self.folder_assets / "telescope"
+        return self.folder_assets / "observatory"
 
     @property
     def folder_schedule(self):

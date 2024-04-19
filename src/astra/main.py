@@ -50,7 +50,7 @@ def load_observatories():
     global fws
     global debug
 
-    config_files = glob(os.path.join(CONFIG.folder_telescope, "*.yml"))
+    config_files = glob(os.path.join(CONFIG.folder_observatory, "*.yml"))
 
     for config_filename in config_files:
         obs = Astra(config_filename, debug, truncate_schedule, speculoos=True)
