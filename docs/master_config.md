@@ -1,13 +1,11 @@
 # Configuration
 
-The astra software is configure through the yaml configuration file `~/.astra/config.yaml` with the following fields:
-```yaml
-# path of the folder where astra reads and writes data
-folder_assets: /Users/lgrcia/code/dev/astra/assets
+Astra is configured through the `yaml` configuration file `~/.astra/config.yaml` containing the following keys:
 
-# path of the local gaia database used by astra for the pointing model
-gaia_db: null
-```
+| key | value |
+| --- | --- |
+| `folder_assets` | path of the folder where astra reads and writes data |
+| `gaia_db` | path of the local gaia database used by astra to plate solve images (used when pointing)|
 
 Under the assets folder, the following strucure is created:
 ```
@@ -17,3 +15,5 @@ assets
 ├── observatory   # observatory config files
 └── schedule      # schedule files
 ```
+
+Within Python, the configuration can be accessed through the `astra.CONFIG` object.

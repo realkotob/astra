@@ -11,9 +11,10 @@ Astra
    :caption: Contents:
 
    installation
-   development
+   master_config
    operations
    modules
+   development
 
 
 .. automethod:: astra.Astra.watchdog
