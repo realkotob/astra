@@ -89,19 +89,18 @@ class Guider:
         # guide directions
         self.DIRECTIONS = {}
         for direction in params["DIRECTIONS"]:
-            match params["DIRECTIONS"][direction]:
-                case "North":
-                    self.DIRECTIONS[direction] = GuideDirections.guideNorth
-                case "South":
-                    self.DIRECTIONS[direction] = GuideDirections.guideSouth
-                case "East":
-                    self.DIRECTIONS[direction] = GuideDirections.guideEast
-                case "West":
-                    self.DIRECTIONS[direction] = GuideDirections.guideWest
-                case _:
-                    self.__log(
-                        "error", f"Invalid guide direction {self.DIRECTIONS[direction]}"
-                    )
+            if params["DIRECTIONS"][direction] == "North":
+                self.DIRECTIONS[direction] = GuideDirections.guideNorth
+            elif params["DIRECTIONS"][direction] == "South":
+                self.DIRECTIONS[direction] = GuideDirections.guideSouth
+            elif params["DIRECTIONS"][direction] == "East":
+                self.DIRECTIONS[direction] = GuideDirections.guideEast
+            elif params["DIRECTIONS"][direction] == "West":
+                self.DIRECTIONS[direction] = GuideDirections.guideWest
+            else:
+                self.__log(
+                    "error", f"Invalid guide direction {self.DIRECTIONS[direction]}"
+                )
 
         # RA axis alignment along x or y? TODO: can be inferred from telescope direction
         self.RA_AXIS = params["RA_AXIS"]
@@ -922,7 +921,7 @@ class Guider:
 PID loop controller
 """
 
-# pylint: disable=invalid-name
+# : disable=invalid-name
 # pylint: disable=too-many-arguments
 # pylint: disable=too-many-instance-attributes
 

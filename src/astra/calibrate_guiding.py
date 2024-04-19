@@ -214,17 +214,16 @@ def pulseGuide(scope: Telescope, direction_int, duration):
     """
     print("Pulse guiding {} for {}ms".format(direction_int, duration))
 
-    match direction_int:
-        case 0:
-            direction = GuideDirections.guideNorth
-        case 1:
-            direction = GuideDirections.guideSouth
-        case 2:
-            direction = GuideDirections.guideEast
-        case 3:
-            direction = GuideDirections.guideWest
-        case _:
-            print("Invalid direction")
+    if direction_int == 0:
+        direction = GuideDirections.guideNorth
+    elif direction_int == 1:
+        direction = GuideDirections.guideSouth
+    elif direction_int == 2:
+        direction = GuideDirections.guideEast
+    elif direction_int == 3:
+        direction = GuideDirections.guideWest
+    else:
+        print("Invalid direction")
 
     print("Pulse guiding {} for {}ms".format(direction, duration))
 
@@ -347,22 +346,21 @@ if __name__ == "__main__":
         assert len(set(DIRECTION_STORE[dir])) == 1
 
         xy = DIRECTION_STORE[dir][0]
-        match dir:
-            case 0:
-                direction = "North"
-            case 1:
-                direction = "South"
-            case 2:
-                direction = "East"
-                if xy == "+x" or xy == "-x":
-                    config["RA_AXIS"] = "x"
-                else:
-                    config["RA_AXIS"] = "y"
-            case 3:
-                direction = "West"
-            case _:
-                direction = "Invalid direction"
-                print("Invalid direction")
+        if dir == 0:
+            direction = "North"
+        elif dir == 1:
+            direction = "South"
+        elif dir == 2:
+            direction = "East"
+            if xy == "+x" or xy == "-x":
+                config["RA_AXIS"] = "x"
+            else:
+                config["RA_AXIS"] = "y"
+        elif dir == 3:
+            direction = "West"
+        else:
+            direction = "Invalid direction"
+            print("Invalid direction")
 
         config["PIX2TIME"][xy] = pulse_time / np.average(SCALE_STORE[dir])
         config["DIRECTIONS"][xy] = direction

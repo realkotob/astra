@@ -579,19 +579,18 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
 
                 shutter_status = polled["ShutterStatus"]["value"]
 
-                match shutter_status:
-                    case 0:
-                        status = "open"
-                    case 1:
-                        status = "closed"
-                    case 2:
-                        status = "opening"
-                    case 3:
-                        status = "closing"
-                    case 4:
-                        status = "error"
-                    case _:
-                        status = "unknown"
+                if shutter_status == 0:
+                    status = "open"
+                elif shutter_status == 1:
+                    status = "closed"
+                elif shutter_status == 2:
+                    status = "opening"
+                elif shutter_status == 3:
+                    status = "closing"
+                elif shutter_status == 4:
+                    status = "error"
+                else:
+                    status = "unknown"
 
                 dt = polled["ShutterStatus"]["datetime"]
 
@@ -674,21 +673,20 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
 
                 camera_status = polled["CameraState"]["value"]
 
-                match camera_status:
-                    case 0:
-                        status = "idle"
-                    case 1:
-                        status = "waiting"
-                    case 2:
-                        status = "exposing"
-                    case 3:
-                        status = "reading"
-                    case 4:
-                        status = "download"
-                    case 5:
-                        status = "error"
-                    case _:
-                        status = "unknown"
+                if camera_status == 0:
+                    status = "idle"
+                elif camera_status == 1:
+                    status = "waiting"
+                elif camera_status == 2:
+                    status = "exposing"
+                elif camera_status == 3:
+                    status = "reading"
+                elif camera_status == 4:
+                    status = "download"
+                elif camera_status == 5:
+                    status = "error"
+                else:
+                    status = "unknown"
 
                 status += f" ({polled['CCDTemperature']['value']:.2f} C)"
 
