@@ -48,7 +48,12 @@ class Config:
         """Folder where image files are stored."""
         return self.folder_assets / "images"
 
-    def check_assets_folders(self, names, exist_ok=True):
+    @property
+    def file_log(self):
+        """Log file path."""
+        return self.folder_log / "astra.log"
+
+    def check_assets_folders(self, *names, exist_ok=True):
         """Check if the assets folders exist, if not create them, i.e.
         telescope, schedule, log. Base folder is defined in the config file as
         ``folder_assets``.
@@ -65,7 +70,11 @@ class Config:
         for folder in names:
             if not (self.folder_assets / folder).exists():
                 (self.folder_assets / folder).mkdir()
-                print(f"Folder {self.folder_assets / folder} created")
+                print(f"Created folder {self.folder_assets / folder}")
+
+        # write onto log file (create if not exist)
+        with open(self.file_log, "a") as file:
+            file.write("")
 
     def check_config_file(self, exist_ok=True):
         """Check if the config file exists, if not create it.
@@ -81,17 +90,20 @@ class Config:
         FileExistsError
             If the file already exists and `exist_ok` is False.
         """
-        if self.file_config.exists() and not exist_ok:
-            raise FileExistsError("Config file already exists")
-        else:
-            config = {
-                "folder_assets": str(Path(__file__).parent.parent.parent / "assets"),
-                "gaia_db": None,
-            }
+        if not self.file_config.exists():
+            if not exist_ok:
+                raise FileExistsError("Config file already exists")
+            else:
+                config = {
+                    "folder_assets": str(
+                        Path(__file__).parent.parent.parent / "assets"
+                    ),
+                    "gaia_db": None,
+                }
 
-            with open(self.file_config, "w") as file:
-                yaml.dump(config, file)
-                print(f"Config file created at {self.file_config}")
+                with open(self.file_config, "w") as file:
+                    yaml.dump(config, file)
+                    print(f"Created config file {self.file_config}")
 
     def load_config(self):
         """Load the config file."""
