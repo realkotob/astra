@@ -41,6 +41,7 @@ docs = [
     "sphinx-design",
     "ipywidgets",
     "sphinx-copybutton",
+    "docformatter[tomli]",
 ]
 
 [project.urls]

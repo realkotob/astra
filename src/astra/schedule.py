@@ -9,9 +9,8 @@ from astra import CONFIG
 
 
 def update_times(df: pd.DataFrame, time_factor: float) -> pd.DataFrame:
-    """
-    Update the start and end times to present day factored by the time factor
-    """
+    """Update the start and end times to present day factored by the time
+    factor."""
 
     new_rows = []
     prev_start_time = None
@@ -143,9 +142,8 @@ def action_series_to_dict(row: pd.Series) -> dict:
 
 
 def unflatten_action(action: dict) -> dict:
-    """
-    Set ``filter`` and ``n`` of an action to a list if `filter` is simply a string.
-    """
+    """Set ``filter`` and ``n`` of an action to a list if `filter` is simply a
+    string."""
     action_type, action_values = action_type_values(action)
     if action_type in ["flats", "calib"]:
         if isinstance(action_values["filter"], str):
@@ -156,9 +154,7 @@ def unflatten_action(action: dict) -> dict:
 
 
 def check_action(action: dict) -> bool:
-    """
-    Check if an action (as dictionary) is valid
-    """
+    """Check if an action (as dictionary) is valid."""
     message = None
     action_type, action_values = action_type_values(action)
 
@@ -188,9 +184,7 @@ def check_action(action: dict) -> bool:
 
 
 def df_to_actions_list(df: pd.DataFrame) -> list:
-    """
-    Convert a DataFrame to a a list of actions (each action being a dict)
-    """
+    """Convert a DataFrame to a a list of actions (each action being a dict)"""
     schedule_list = []
     for _, row in df.iterrows():
         action = action_series_to_dict(row)
@@ -199,9 +193,7 @@ def df_to_actions_list(df: pd.DataFrame) -> list:
 
 
 def actions_list_to_df(actions_list: list, observatory: str) -> pd.DataFrame:
-    """
-    Convert a list of actions (each action being a dict) to a DataFrame
-    """
+    """Convert a list of actions (each action being a dict) to a DataFrame."""
     actions_series = [
         action_dict_to_series(action, observatory) for action in actions_list
     ]
@@ -238,7 +230,8 @@ ACTION_CHECKERS = {
 
 
 def check_duration(duration_str: str) -> timedelta:
-    """Check duration string, either a float and seconds or a "HH:MM:SS" string
+    """Check duration string, either a float and seconds or a "HH:MM:SS"
+    string.
 
     Parameters
     ----------
@@ -300,12 +293,19 @@ def normalize_and_check_actions(actions_list: list) -> list:
 
 
 def read_schedule(filename, observatory_name=None, truncate=False) -> pd.DataFrame:
-    """Read a schedule file and return a DataFrame. Following steps are take:
+    """Read a schedule file and return a DataFrame. The schedule file can be in
+    CSV or YAML format. The yaml file directly exposes the actions as a list of
+    dictionaries. If a CSV is provided, the actions are read as a DataFrame and
+    then converted to a list of dictionaries. Finally, because the original
+    output of Astra 0.2 was a DataFrame, the list of actions is converted back
+    to a DataFrame and returned.
 
-    - 1. Read the schedule file and convert to an actions list, each action being a dict
-    - 2. Normalize the actions, i.e. convert filter and n to lists and explicitly set start_time and end_time
-    - 3. Check if the action is valid
-    - 4. Convert the schedule list to a DataFrame (for now)
+    Following steps are taken:
+
+    - 1. Read the schedule file and convert to a list of actions, each action being a dict
+    - 2. (this part is not implemented yet) Normalize the actions, i.e. convert filter and n to lists and explicitly set start_time and end_time
+    - 3. (this part is not implemented yet) Check if each action is valid
+    - 4. Convert the actions list to a DataFrame (for now)
     - Return the DataFrame
 
     Parameters
@@ -332,6 +332,8 @@ def read_schedule(filename, observatory_name=None, truncate=False) -> pd.DataFra
     if schedule_path.exists() is False:
         raise FileNotFoundError(f"File not found: {filename}")
 
+
+
     # 1. read schedule and convert to a DataFrame
     if schedule_path.suffix == ".csv":
         schedule = pd.read_csv(schedule_path)
@@ -350,6 +352,8 @@ def read_schedule(filename, observatory_name=None, truncate=False) -> pd.DataFra
         raise ValueError(f"Unsupported file format: {schedule_path.suffix}")
 
     # 2. Normalize the actions
+    # TODO: WIP
+
     # 3. Check the actions
     # TODO: WIP
 
