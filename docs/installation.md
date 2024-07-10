@@ -36,7 +36,7 @@ Once installed, activate your environment (highly recommended) and run
 
 ```bash
 conda activate astra
-python -c "from astra import Astra"
+python -c "import astra"
 ```
 
 If no error is raised you're all set!

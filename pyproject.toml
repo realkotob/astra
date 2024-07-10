@@ -2,7 +2,7 @@
 name = "astra"
 description = "Automated Survey observaTory Robotised with Alpaca"
 version = "0.3.0"
-authors = [{ name = "Peter Pederson " }]
+authors = [{ name = "Peter Pedersen " }]
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "GPL-3.0" }

@@ -13,8 +13,6 @@ import numpy as np
 import pandas as pd
 import psutil
 import yaml
-
-# from ascom_device_process import AscomDevice
 from astropy.coordinates import EarthLocation, SkyCoord
 from astropy.io import fits
 from astropy.time import Time

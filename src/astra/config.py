@@ -10,10 +10,10 @@ class Config:
     assets folder if they do not exist.
     """
 
-    folder_config: str = Path.home() / ".astra"
-    """folder where astra config files are located"""
+    folder_config: str = Path(__file__).parent.parent
+    """folder where astra config file is located"""
 
-    file_config: str = folder_config / "config.yaml"
+    file_config: str = folder_config / "astra_config.yaml"
     """config file path"""
 
     folder_assets: None
@@ -23,27 +23,22 @@ class Config:
         self.folder_config.mkdir(exist_ok=True)
         self.config = self.load_config()
         self.str_time_format = "%Y-%m-%d %H:%M:%S"
-        self.check_assets_folders("log", "schedule", "observatory", "temp", "images")
+        self.check_assets_folders("logs", "schedules", "observatory_config", "images")
 
     @property
     def folder_observatory(self):
         """Folder where telescope configuration are stored."""
-        return self.folder_assets / "observatory"
+        return self.folder_assets / "observatory_config"
 
     @property
     def folder_schedule(self):
         """Folder where schedule files are stored."""
-        return self.folder_assets / "schedule"
+        return self.folder_assets / "schedules"
 
     @property
     def folder_log(self):
         """Folder where log files are stored."""
-        return self.folder_assets / "log"
-
-    @property
-    def folder_temp(self):
-        """Folder where temporary files are stored."""
-        return self.folder_assets / "temp"
+        return self.folder_assets / "logs"
 
     @property
     def folder_images(self):

@@ -5,6 +5,7 @@ import os
 import sqlite3
 import time
 from contextlib import asynccontextmanager
+from datetime import UTC
 from glob import glob
 from io import BytesIO
 from pathlib import Path
@@ -23,7 +24,7 @@ from astra import CONFIG
 from astra.observatory import Observatory
 
 # global variables
-FRONTEND_PATH = Path(__file__).parent.parent.parent / "frontend"
+FRONTEND_PATH = Path(__file__).parent / "frontend"
 OBSERVATORIES = {}
 WEBCAMFEEDS = {}
 FWS = {}
@@ -464,7 +465,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
 
     socket = True
     while socket:
-        dt_now = datetime.datetime.utcnow()
+        dt_now = datetime.datetime.now(UTC)
         polled_list = {}
 
         for device_type in obs.devices:
@@ -495,7 +496,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
             {"item": "error free", "value": obs.error_free},
             {
                 "item": "utc time",
-                "value": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                "value": datetime.datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
             },
             {
                 "item": "watchdog",

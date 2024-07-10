@@ -1,12 +1,14 @@
+import os
+import signal
 import time
-from datetime import datetime
-
+from datetime import UTC, datetime
+from multiprocessing import Lock, Pipe, Process
 from threading import Thread
-from multiprocessing import Process, Pipe, Lock
 
 from alpaca.camera import *
 from alpaca.covercalibrator import *
 from alpaca.dome import *
+from alpaca.exceptions import *
 from alpaca.filterwheel import *
 from alpaca.focuser import *
 from alpaca.observingconditions import *
@@ -14,10 +16,6 @@ from alpaca.rotator import *
 from alpaca.safetymonitor import *
 from alpaca.switch import *
 from alpaca.telescope import *
-from alpaca.exceptions import *
-
-import os
-import signal
 
 # https://medium.com/@sampsa.riikonen/doing-python-multiprocessing-the-right-way-a54c1880e300
 # https://stackoverflow.com/questions/27435284/multiprocessing-vs-multithreading-vs-asyncio
@@ -417,7 +415,7 @@ class AlpacaDevice(Process):
                             raise ValueError(get)
                     time.sleep(0)
 
-                    dt = datetime.utcnow()
+                    dt = datetime.now(UTC)
                     dt_str = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
 
                     self.queue.put(
@@ -436,7 +434,7 @@ class AlpacaDevice(Process):
                     time.sleep(delay)
                 time.sleep(0)
         except Exception as e:
-            dt = datetime.utcnow()
+            dt = datetime.now(UTC)
             self._poll_latest[method]["datetime"] = dt
             self._poll_latest[method]["value"] = "null"
             self.queue.put(
