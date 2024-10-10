@@ -48,7 +48,6 @@ class Observatory:
     def __init__(
         self,
         config_filename: str,
-        debug: bool = False,
         truncate_schedule: bool = False,
         speculoos: bool = False,
     ):
@@ -129,7 +128,7 @@ class Observatory:
         self.schedule_mtime = self.get_schedule_mtime()
 
         # load devices
-        self.monitor_action_queue = {}
+        self.monitor_action_queue = {} # queue for monitoring/running actions per device_name
         self.devices = self.load_devices()
         self.last_image = None
 
@@ -524,87 +523,33 @@ class Observatory:
 
         # initial safety monitor check
         if "SafetyMonitor" in self.config:
-            try:
-                time_to_safe = self.config["SafetyMonitor"][0]["time_to_safe"]
-            except KeyError as e:
-                self.logger.warning(
-                    f"Error reading time_to_safe from config, defaulting to 30 minutes."
-                )
-                time_to_safe = 30
-
             self.logger.info("Safety monitor found")
+
+            try:
+                max_safe_duration = self.config["SafetyMonitor"][0]["max_safe_duration"]
+            except KeyError:
+                max_safe_duration = 30
+                self.logger.warning(
+                    f"No max_safe_duration in user config, defaulting to {max_safe_duration} minutes."
+                )
 
             device_type = "SafetyMonitor"
             sm_name = self.config[device_type][0]["device_name"]
-
             safety_monitor = self.devices[device_type][sm_name]
-
-            try:
-                sm_poll = safety_monitor.poll_latest()
-
-                while sm_poll["IsSafe"]["value"] is None and self.error_free:
-                    sm_poll = safety_monitor.poll_latest()
-                    time.sleep(0.5)
-            except Exception as e:
-                self.error_source.append(
-                    {
-                        "device_type": "SafetyMonitor",
-                        "device_name": sm_name,
-                        "error": str(e),
-                    }
-                )
-                self.logger.error(f"Error polling safety monitor {sm_name}: {str(e)}")
-
         else:
             self.logger.warning("No safety monitor found")
 
-        # observatory weather_warning flag, used to prevent multiple logging of weather unsafe
-        weather_warning = False
+        # observatory weather_log_warning flag, used to prevent multiple logging of weather unsafe
+        weather_log_warning = False
 
         while self.watchdog_running:
             # check if any devices unresponsive - hopefully never happens
-            for device_type in self.devices:
-                for device_name in self.devices[device_type]:
-                    try:
-                        r = self.devices[device_type][device_name].is_alive()
-                        if r is False:
-                            self.error_source.append(
-                                {
-                                    "device_type": device_type,
-                                    "device_name": device_name,
-                                    "error": "Device unresponsive",
-                                }
-                            )
-                            self.logger.error(
-                                f"{device_type} {device_name} unresponsive"
-                            )
-                    except Exception as e:
-                        self.error_source.append(
-                            {
-                                "device_type": device_type,
-                                "device_name": device_name,
-                                "error": str(e),
-                            }
-                        )
-                        self.logger.error(f"{device_type} {device_name} unresponsive")
+            self.check_devices_alive()
 
-            # update heartbeat
-            self.heartbeat["datetime"] = datetime.now(UTC).strftime(
-                "%Y-%m-%d %H:%M:%S.%f"
-            )[:-3]
-            self.heartbeat["error_free"] = self.error_free
-            self.heartbeat["error_source"] = self.error_source
-            self.heartbeat["weather_safe"] = self.weather_safe
-            self.heartbeat["schedule_running"] = self.schedule_running
-            self.heartbeat["cpu_percent"] = psutil.cpu_percent()
-            self.heartbeat["memory_percent"] = psutil.virtual_memory().percent
-            self.heartbeat["disk_percent"] = psutil.disk_usage("/").percent
-            self.heartbeat["threads"] = [
-                {"type": i["type"], "device_name": i["device_name"], "id": i["id"]}
-                for i in self.threads
-            ]
-            ## TODO add dome & telescope status
+            # update heartbeat dictionary
+            self.update_heartbeat()
 
+            # if no errors, proceed with remaining watchdog checks/actions
             if self.error_free is True:
                 try:
                     # check if schedule file updated
@@ -654,67 +599,61 @@ class Observatory:
                             self.weather_safe = False
 
                             # log message saying weather unsafe
-                            if weather_warning is False:
+                            if weather_log_warning is False:
                                 self.logger.warning("Weather unsafe")
 
                             # may want to close dome before park telescope?
                             self.close_observatory()  # checks if already closed and closes if not
 
                         # check weather history for weather unsafe
-                        if self.truncate_schedule is True:
-                            rows = self.cursor.execute(
-                                "SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-1 minutes')"
-                            )
-                        else:
-                            rows = self.cursor.execute(
-                                f"SELECT * FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-{time_to_safe} minutes')"
-                            )
-
-                    else:
-                        rows = []
-
-                    try:
-                        if self.truncate_schedule:
-                            if len(rows) > 0:
-                                last_datetime = rows[-1][4]
-                                time_diff = datetime.now(UTC) - pd.to_datetime(
-                                    last_datetime, format="%Y-%m-%d %H:%M:%S.%f"
-                                )
-                                self.time_to_safe = 1 - time_diff.total_seconds() / 60
-                            else:
-                                self.time_to_safe = 0
-                        else:
-                            if len(rows) > 0:
-                                last_datetime = rows[-1][4]
-                                time_diff = datetime.now(UTC) - pd.to_datetime(
-                                    last_datetime, format="%Y-%m-%d %H:%M:%S.%f"
-                                )
-                                self.time_to_safe = (
-                                    time_to_safe - time_diff.total_seconds() / 60
-                                )
-                            else:
-                                self.time_to_safe = 0
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Issue in parsing datetime during time_to_safe check: {str(e)}"
+                        rows = self.cursor.execute(
+                            f"SELECT COUNT(*), MAX(datetime) FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-{time_to_safe} minutes')"
                         )
+                    else:
+                        rows = [(0, None)]
+
+                    # check internal safety monitor
+                    internal_safety, internal_time_to_safe, internal_max_safe_duration = self.internal_safety_weather_monitor()
+
+                    # if internal safety monitor is False, act on it
+                    if internal_safety is False:
+                        self.weather_safe = False
+
+                        # log message saying weather unsafe
+                        if weather_log_warning is False:
+                            self.logger.warning("Weather unsafe")
+
+                        self.close_observatory()  # checks if already closed and closes if not
+
+                    # set time_to_safe if weather unsafe
+                    if rows[0][0] > 0 or internal_time_to_safe > 0:
+                        time_since_last_unsafe = pd.to_datetime(
+                            datetime.now(UTC)
+                        ) - pd.to_datetime(rows[0][1])
+
+                        current_time_to_safe = (
+                            max_safe_duration - time_since_last_unsafe.total_seconds() / 60
+                        )
+
+                        self.time_to_safe = max(current_time_to_safe, internal_time_to_safe)
+                    else:
+                        self.time_to_safe = 0
 
                     self.logger.debug(
-                        f"Watchdog: {len(rows)} instances of weather unsafe found in last {'1' if self.truncate_schedule else '60'} minutes"
+                        f"Watchdog: {rows} instances of weather unsafe found in last {max(max_safe_duration, internal_max_safe_duration)} minutes"
                     )
 
-                    # if no weather unsafe in last 30 minutes, weather is "safe"
-                    if len(rows) == 0 and weather_warning is True:
-                        self.logger.info(
-                            f"Weather safe for the last {'1' if self.truncate_schedule else f'{time_to_safe}'} minutes"
-                        )
-
-                    if len(rows) == 0:
+                    # if no weather unsafe in last max_safe_duration minutes, weather is "safe"
+                    if (rows[0][0] == 0) and internal_safety:
                         self.weather_safe = True
-                        weather_warning = False  # reset weather_warning flag
+                        if weather_log_warning:
+                            self.logger.info(
+                                f"Weather safe for the last {max(max_safe_duration, internal_max_safe_duration)} minutes"
+                            )
+                            weather_log_warning = False  # reset weather_log_warning flag
                     else:
                         self.weather_safe = False  # set here too just in case watchdog started after weather unsafe
-                        weather_warning = True
+                        weather_log_warning = True
 
                 except Exception as e:
                     self.error_source.append(
@@ -821,6 +760,136 @@ class Observatory:
         self.schedule_running = False  # stop schedule if watchdog stopped
         self.watchdog_running = False
         self.logger.warning("Watchdog stopped")
+
+    def internal_safety_weather_monitor(self) -> float:
+        """
+        This method monitors the internal safety of the observatory and the weather conditions.
+
+        """
+
+        longest_time_to_safe = 0
+        longest_max_safe_duration = 0
+        if "ObservingConditions" in self.config:
+
+            closing_limits = self.config["ObservingConditions"][0]["closing_limits"]
+
+            for parameter in closing_limits:
+                limits = closing_limits[parameter]
+                for limit in limits:
+
+                    max_safe_duration = limit["max_safe_duration"]
+                    min_limit = limit["min"]
+                    max_limit = limit["max"]
+
+                    q = f"""
+                    SELECT COUNT(*), MAX(datetime) FROM polling 
+                    WHERE device_type = 'ObservingConditions' 
+                    AND device_command = '{parameter}' 
+                    AND (CAST(device_value AS FLOAT) < {min_limit} OR CAST(device_value AS FLOAT) > {max_limit})
+                    AND datetime > datetime('now', '-{max_safe_duration} minutes')
+                    """
+
+                    rows = self.cursor.execute(q)
+
+                    if rows[0][0] > 0:
+                        time_since_last_unsafe = pd.to_datetime(
+                            datetime.now(UTC)
+                        ) - pd.to_datetime(rows[0][1])
+
+                        current_time_to_safe = (
+                            max_safe_duration - time_since_last_unsafe.total_seconds() / 60
+                        )
+
+                        if current_time_to_safe > longest_time_to_safe:
+                            longest_time_to_safe = current_time_to_safe
+                        
+                        if max_safe_duration > longest_max_safe_duration:
+                            longest_max_safe_duration = max_safe_duration
+
+        return longest_time_to_safe == 0, longest_time_to_safe, longest_max_safe_duration
+
+    def check_devices_alive(self) -> bool:
+        
+        for device_type in self.devices:
+            for device_name in self.devices[device_type]:
+                try:
+                    r = self.devices[device_type][device_name].is_alive()
+                    if r is False:
+                        self.error_source.append(
+                            {
+                                "device_type": device_type,
+                                "device_name": device_name,
+                                "error": "Device unresponsive",
+                            }
+                        )
+                        self.logger.error(
+                            f"{device_type} {device_name} unresponsive"
+                        )
+                except Exception as e:
+                    self.error_source.append(
+                        {
+                            "device_type": device_type,
+                            "device_name": device_name,
+                            "error": str(e),
+                        }
+                    )
+                    self.logger.error(f"{device_type} {device_name} unresponsive")
+                    return False
+
+        return True
+
+    def update_heartbeat(self) -> None:
+        # update heartbeat
+        self.heartbeat["datetime"] = datetime.now(UTC).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )[:-3]
+        self.heartbeat["error_free"] = self.error_free
+        self.heartbeat["error_source"] = self.error_source
+        self.heartbeat["weather_safe"] = self.weather_safe
+        self.heartbeat["schedule_running"] = self.schedule_running
+        self.heartbeat["cpu_percent"] = psutil.cpu_percent()
+        self.heartbeat["memory_percent"] = psutil.virtual_memory().percent
+        self.heartbeat["disk_percent"] = psutil.disk_usage("/").percent
+        self.heartbeat["threads"] = [
+            {"type": i["type"], "device_name": i["device_name"], "id": i["id"]}
+            for i in self.threads
+        ]
+
+        polled_list = {}
+
+        for device_type in self.devices:
+            polled_list[device_type] = {}
+
+            for device_name in self.devices[device_type]:
+                polled_list[device_type][device_name] = {}
+
+                try:
+                    polled = self.devices[device_type][device_name].poll_latest()
+                except Exception as e:
+                    self.error_source.append(
+                        {
+                            "device_type": device_type,
+                            "device_name": device_name,
+                            "error": str(e),
+                        }
+                    )
+                    self.logger.error(
+                        f"Error polling {device_type} {device_name}: {str(e)}"
+                    )
+                    polled = None
+
+                if polled is not None:  # not sure if correct to put this here, or later
+                    polled_keys = polled.keys()
+                    for k in polled_keys:
+                        polled_list[device_type][device_name][k] = {}
+                        polled_list[device_type][device_name][k]["value"] = polled[k][
+                            "value"
+                        ]
+                        polled_list[device_type][device_name][k]["datetime"] = polled[
+                            k
+                        ]["datetime"]
+
+        self.heartbeat["polling"] = polled_list
 
     def speculoos_check_and_ack_error(self):
         if "Telescope" in self.config:
@@ -1254,9 +1323,6 @@ class Observatory:
                         }
                     )
 
-                    # if open or close, wait for thread to finish before continuing
-                    # TODO: use join?
-                    # if row['action_type'] in ['open', 'close']:
                     # wait for thread to finish
                     while (th.is_alive() is True) and self.check_conditions(row):
                         time.sleep(1)
@@ -1729,9 +1795,9 @@ class Observatory:
         if not exposure_successful:
             self.logger.warning("Last exposure was not completed successfully.")
             filepath = None
-            # TODO: if error_free is True, abort exposure
-            # if self.error_free:
-            #     camera.get("AbortExposure")()  # check
+            # if error_free is True, abort exposure
+            if self.error_free:
+                camera.get("AbortExposure")()  # check
         else:
             # get last exposure information
             last_exposure_start_time = camera.get("LastExposureStartTime")
@@ -2814,6 +2880,7 @@ class Observatory:
             f"Monitor action: Starting {device_type} {device_name} {monitor_command} {desired_condition} {run_command} {run_command_type} {abs_tol} {log_message} {timeout}"
         )
 
+        # create unique key for monitor action and add to queue for device_name
         unique_key = f"{device_type}{monitor_command}{desired_condition}{run_command}{run_command_type}"
         self.monitor_action_queue[device_name][unique_key] = start_time
 
@@ -2834,10 +2901,10 @@ class Observatory:
                         f"Monitor run action queue timeout: {device_type} {monitor_command} {desired_condition} {run_command}"
                     )
 
-            # Execute monitor action
+            ## Execute monitor action
             device = self.devices[device_type][device_name]
 
-            # define command type
+            # define run command type
             if monitor_command == run_command and run_command_type == "":
                 run_command_type = "set"
             elif run_command_type == "":
