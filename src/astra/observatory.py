@@ -602,12 +602,11 @@ class Observatory:
                             if weather_log_warning is False:
                                 self.logger.warning("Weather unsafe")
 
-                            # may want to close dome before park telescope?
                             self.close_observatory()  # checks if already closed and closes if not
 
                         # check weather history for weather unsafe
                         rows = self.cursor.execute(
-                            f"SELECT COUNT(*), MAX(datetime) FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-{time_to_safe} minutes')"
+                            f"SELECT COUNT(*), MAX(datetime) FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-{max_safe_duration} minutes')"
                         )
                     else:
                         rows = [(0, None)]
@@ -652,7 +651,7 @@ class Observatory:
                             )
                             weather_log_warning = False  # reset weather_log_warning flag
                     else:
-                        self.weather_safe = False  # set here too just in case watchdog started after weather unsafe
+                        self.weather_safe = False  # set here too just in case watchdog started after weather unsafe?
                         weather_log_warning = True
 
                 except Exception as e:
@@ -769,42 +768,58 @@ class Observatory:
 
         longest_time_to_safe = 0
         longest_max_safe_duration = 0
-        if "ObservingConditions" in self.config:
+        if "ObservingConditions" in self.config and "Dome" in self.config:
 
-            closing_limits = self.config["ObservingConditions"][0]["closing_limits"]
+            # check if observatory closed
+            # open = heartbeat? or direct query? 
 
-            for parameter in closing_limits:
-                limits = closing_limits[parameter]
-                for limit in limits:
+            # check current weather or history?
 
-                    max_safe_duration = limit["max_safe_duration"]
-                    min_limit = limit["min"]
-                    max_limit = limit["max"]
+            # only run if observatory closed?
+            # if "opening_limits" in self.config["ObservingConditions"][0]:
+            #     opening_limits = self.config["ObservingConditions"][0]["opening_limits"]
 
-                    q = f"""
-                    SELECT COUNT(*), MAX(datetime) FROM polling 
-                    WHERE device_type = 'ObservingConditions' 
-                    AND device_command = '{parameter}' 
-                    AND (CAST(device_value AS FLOAT) < {min_limit} OR CAST(device_value AS FLOAT) > {max_limit})
-                    AND datetime > datetime('now', '-{max_safe_duration} minutes')
-                    """
+            #     for parameter in opening_limits:
+            #         limits = opening_limits[parameter]
+            #         for limit in limits:
 
-                    rows = self.cursor.execute(q)
+            #             ...
 
-                    if rows[0][0] > 0:
-                        time_since_last_unsafe = pd.to_datetime(
-                            datetime.now(UTC)
-                        ) - pd.to_datetime(rows[0][1])
+            if "closing_limits" in self.config["ObservingConditions"][0]:
+                closing_limits = self.config["ObservingConditions"][0]["closing_limits"]
 
-                        current_time_to_safe = (
-                            max_safe_duration - time_since_last_unsafe.total_seconds() / 60
-                        )
+                for parameter in closing_limits:
+                    limits = closing_limits[parameter]
+                    for limit in limits:
 
-                        if current_time_to_safe > longest_time_to_safe:
-                            longest_time_to_safe = current_time_to_safe
-                        
-                        if max_safe_duration > longest_max_safe_duration:
-                            longest_max_safe_duration = max_safe_duration
+                        max_safe_duration = limit["max_safe_duration"]
+                        min_limit = limit["min"]
+                        max_limit = limit["max"]
+
+                        q = f"""
+                        SELECT COUNT(*), MAX(datetime) FROM polling 
+                        WHERE device_type = 'ObservingConditions' 
+                        AND device_command = '{parameter}' 
+                        AND (CAST(device_value AS FLOAT) < {min_limit} OR CAST(device_value AS FLOAT) > {max_limit})
+                        AND datetime > datetime('now', '-{max_safe_duration} minutes')
+                        """
+
+                        rows = self.cursor.execute(q)
+
+                        if rows[0][0] > 0:
+                            time_since_last_unsafe = pd.to_datetime(
+                                datetime.now(UTC)
+                            ) - pd.to_datetime(rows[0][1])
+
+                            current_time_to_safe = (
+                                max_safe_duration - time_since_last_unsafe.total_seconds() / 60
+                            )
+
+                            if current_time_to_safe > longest_time_to_safe:
+                                longest_time_to_safe = current_time_to_safe
+                            
+                            if max_safe_duration > longest_max_safe_duration:
+                                longest_max_safe_duration = max_safe_duration
 
         return longest_time_to_safe == 0, longest_time_to_safe, longest_max_safe_duration
 
