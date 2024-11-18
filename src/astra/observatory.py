@@ -128,7 +128,9 @@ class Observatory:
         self.schedule_mtime = self.get_schedule_mtime()
 
         # load devices
-        self.monitor_action_queue = {} # queue for monitoring/running actions per device_name
+        self.monitor_action_queue = (
+            {}
+        )  # queue for monitoring/running actions per device_name
         self.devices = self.load_devices()
         self.last_image = None
 
@@ -612,7 +614,11 @@ class Observatory:
                         rows = [(0, None)]
 
                     # check internal safety monitor
-                    internal_safety, internal_time_to_safe, internal_max_safe_duration = self.internal_safety_weather_monitor()
+                    (
+                        internal_safety,
+                        internal_time_to_safe,
+                        internal_max_safe_duration,
+                    ) = self.internal_safety_weather_monitor()
 
                     # if internal safety monitor is False, act on it
                     if internal_safety is False:
@@ -628,13 +634,16 @@ class Observatory:
                     if rows[0][0] > 0 or internal_time_to_safe > 0:
                         time_since_last_unsafe = pd.to_datetime(
                             datetime.now(UTC)
-                        ) - pd.to_datetime(rows[0][1])
+                        ) - pd.to_datetime(rows[0][1], utc=True)
 
                         current_time_to_safe = (
-                            max_safe_duration - time_since_last_unsafe.total_seconds() / 60
+                            max_safe_duration
+                            - time_since_last_unsafe.total_seconds() / 60
                         )
 
-                        self.time_to_safe = max(current_time_to_safe, internal_time_to_safe)
+                        self.time_to_safe = max(
+                            current_time_to_safe, internal_time_to_safe
+                        )
                     else:
                         self.time_to_safe = 0
 
@@ -649,7 +658,9 @@ class Observatory:
                             self.logger.info(
                                 f"Weather safe for the last {max(max_safe_duration, internal_max_safe_duration)} minutes"
                             )
-                            weather_log_warning = False  # reset weather_log_warning flag
+                            weather_log_warning = (
+                                False  # reset weather_log_warning flag
+                            )
                     else:
                         self.weather_safe = False  # set here too just in case watchdog started after weather unsafe?
                         weather_log_warning = True
@@ -771,7 +782,7 @@ class Observatory:
         if "ObservingConditions" in self.config and "Dome" in self.config:
 
             # check if observatory closed
-            # open = heartbeat? or direct query? 
+            # open = heartbeat? or direct query?
 
             # check current weather or history?
 
@@ -809,22 +820,27 @@ class Observatory:
                         if rows[0][0] > 0:
                             time_since_last_unsafe = pd.to_datetime(
                                 datetime.now(UTC)
-                            ) - pd.to_datetime(rows[0][1])
+                            ) - pd.to_datetime(rows[0][1], utc=True)
 
                             current_time_to_safe = (
-                                max_safe_duration - time_since_last_unsafe.total_seconds() / 60
+                                max_safe_duration
+                                - time_since_last_unsafe.total_seconds() / 60
                             )
 
                             if current_time_to_safe > longest_time_to_safe:
                                 longest_time_to_safe = current_time_to_safe
-                            
+
                             if max_safe_duration > longest_max_safe_duration:
                                 longest_max_safe_duration = max_safe_duration
 
-        return longest_time_to_safe == 0, longest_time_to_safe, longest_max_safe_duration
+        return (
+            longest_time_to_safe == 0,
+            longest_time_to_safe,
+            longest_max_safe_duration,
+        )
 
     def check_devices_alive(self) -> bool:
-        
+
         for device_type in self.devices:
             for device_name in self.devices[device_type]:
                 try:
@@ -837,9 +853,7 @@ class Observatory:
                                 "error": "Device unresponsive",
                             }
                         )
-                        self.logger.error(
-                            f"{device_type} {device_name} unresponsive"
-                        )
+                        self.logger.error(f"{device_type} {device_name} unresponsive")
                 except Exception as e:
                     self.error_source.append(
                         {
@@ -855,9 +869,9 @@ class Observatory:
 
     def update_heartbeat(self) -> None:
         # update heartbeat
-        self.heartbeat["datetime"] = datetime.now(UTC).strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        )[:-3]
+        self.heartbeat["datetime"] = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")[
+            :-3
+        ]
         self.heartbeat["error_free"] = self.error_free
         self.heartbeat["error_source"] = self.error_source
         self.heartbeat["weather_safe"] = self.weather_safe
@@ -980,7 +994,7 @@ class Observatory:
                         log_message=f"Opening Dome shutter of {paired_devices['Dome']}",
                     )
                 else:
-                    for device_name in self.devices['Dome']:
+                    for device_name in self.devices["Dome"]:
                         self.monitor_action(
                             "Dome",
                             "ShutterStatus",
@@ -1003,7 +1017,7 @@ class Observatory:
                         log_message=f"Unparking Telescope {paired_devices['Telescope']}",
                     )
                 else:
-                    for device_name in self.devices['Telescope']:
+                    for device_name in self.devices["Telescope"]:
                         self.monitor_action(
                             "Telescope",
                             "AtPark",
@@ -1017,7 +1031,9 @@ class Observatory:
             # SPECULOOS EDIT
             self.resume_polls(["Dome", "Telescope", "Focuser"])
 
-    def close_observatory(self, paired_devices: dict | None = None, error_sensitive: bool = True) -> None:
+    def close_observatory(
+        self, paired_devices: dict | None = None, error_sensitive: bool = True
+    ) -> None:
         """
         Close the observatory operations in the following order:
 
@@ -1045,9 +1061,15 @@ class Observatory:
                     self.guider[paired_devices["Telescope"]].running = False
                 except Exception as e:
                     self.error_source.append(
-                        {"device_type": "Guider", "device_name": paired_devices["Telescope"], "error": str(e)}
+                        {
+                            "device_type": "Guider",
+                            "device_name": paired_devices["Telescope"],
+                            "error": str(e),
+                        }
                     )
-                    self.logger.error(f"Error stopping telescope {paired_devices["Telescope"]} guiding: {str(e)}")
+                    self.logger.error(
+                        f"Error stopping telescope {paired_devices['Telescope']} guiding: {str(e)}"
+                    )
 
                 self.monitor_action(
                     "Telescope",
@@ -1057,17 +1079,23 @@ class Observatory:
                     device_name=paired_devices["Telescope"],
                     log_message=f"Stopping telescope {paired_devices['Telescope']} slewing",
                     weather_sensitive=False,
-                    error_sensitive=error_sensitive
+                    error_sensitive=error_sensitive,
                 )
             else:
-                for device_name in self.devices['Telescope']:
+                for device_name in self.devices["Telescope"]:
                     try:
                         self.guider[device_name].running = False
                     except Exception as e:
                         self.error_source.append(
-                            {"device_type": "Guider", "device_name": device_name, "error": str(e)}
+                            {
+                                "device_type": "Guider",
+                                "device_name": device_name,
+                                "error": str(e),
+                            }
                         )
-                        self.logger.error(f"Error stopping telescope {device_name} guiding: {str(e)}")
+                        self.logger.error(
+                            f"Error stopping telescope {device_name} guiding: {str(e)}"
+                        )
 
                     self.monitor_action(
                         "Telescope",
@@ -1077,7 +1105,7 @@ class Observatory:
                         device_name=device_name,
                         log_message=f"Stopping telescope {device_name} slewing",
                         weather_sensitive=False,
-                        error_sensitive=error_sensitive
+                        error_sensitive=error_sensitive,
                     )
 
             # stop telescope tracking
@@ -1090,10 +1118,10 @@ class Observatory:
                     device_name=device_name,
                     log_message=f"Stopping telescope {paired_devices['Telescope']} tracking",
                     weather_sensitive=False,
-                    error_sensitive=error_sensitive
+                    error_sensitive=error_sensitive,
                 )
             else:
-                for device_name in self.devices['Telescope']:
+                for device_name in self.devices["Telescope"]:
                     self.monitor_action(
                         "Telescope",
                         "Tracking",
@@ -1102,7 +1130,7 @@ class Observatory:
                         device_name=device_name,
                         log_message=f"Stopping telescope {device_name} tracking",
                         weather_sensitive=False,
-                        error_sensitive=error_sensitive
+                        error_sensitive=error_sensitive,
                     )
 
             # park telescope
@@ -1115,11 +1143,11 @@ class Observatory:
                     device_name=paired_devices["Telescope"],
                     log_message=f"Parking telescope {paired_devices['Telescope']}",
                     weather_sensitive=False,
-                    error_sensitive=error_sensitive
+                    error_sensitive=error_sensitive,
                 )
 
             else:
-                for device_name in self.devices['Telescope']:
+                for device_name in self.devices["Telescope"]:
                     self.monitor_action(
                         "Telescope",
                         "AtPark",
@@ -1128,7 +1156,7 @@ class Observatory:
                         device_name=device_name,
                         log_message=f"Parking telescope {device_name}",
                         weather_sensitive=False,
-                        error_sensitive=error_sensitive
+                        error_sensitive=error_sensitive,
                     )
 
         if "Dome" in self.config:
@@ -1142,10 +1170,10 @@ class Observatory:
                     device_name=paired_devices["Dome"],
                     log_message=f"Parking Dome {paired_devices['Dome']}",
                     weather_sensitive=False,
-                    error_sensitive=error_sensitive
+                    error_sensitive=error_sensitive,
                 )
             else:
-                for device_name in self.devices['Dome']:
+                for device_name in self.devices["Dome"]:
                     self.monitor_action(
                         "Dome",
                         "AtPark",
@@ -1154,7 +1182,7 @@ class Observatory:
                         device_name=device_name,
                         log_message=f"Parking Dome {device_name}",
                         weather_sensitive=False,
-                        error_sensitive=error_sensitive
+                        error_sensitive=error_sensitive,
                     )
 
             # close dome shutter
@@ -1167,10 +1195,10 @@ class Observatory:
                     device_name=paired_devices["Dome"],
                     log_message=f"Closing Dome shutter of {paired_devices['Dome']}",
                     weather_sensitive=False,
-                    error_sensitive=error_sensitive
+                    error_sensitive=error_sensitive,
                 )
             else:
-                for device_name in self.devices['Dome']:
+                for device_name in self.devices["Dome"]:
                     self.monitor_action(
                         "Dome",
                         "ShutterStatus",
@@ -1179,7 +1207,7 @@ class Observatory:
                         device_name=device_name,
                         log_message=f"Closing Dome shutter of {device_name}",
                         weather_sensitive=False,
-                        error_sensitive=error_sensitive
+                        error_sensitive=error_sensitive,
                     )
 
         if self.speculoos:

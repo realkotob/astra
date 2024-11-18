@@ -1,6 +1,6 @@
 Telescope:
   - device_name: telescope_observatoryname
-    ip: localhost:11111
+    ip: localhost
     device_number: 0
     pointing_threshold: 0.06 # arcmins
     guider:
@@ -23,11 +23,11 @@ Telescope:
       WAIT_TIME: 10
 Focuser:
   - device_name: focuser_observatoryname
-    ip: localhost:11111
+    ip: localhost
     device_number: 0
 Camera:
   - device_name: camera_observatoryname
-    ip: localhost:11111
+    ip: localhost
     device_number: 0
     temperature: -60
     temperature_tolerance: 1
@@ -45,15 +45,15 @@ Camera:
       SafetyMonitor: safety_observatoryname
 Dome:
   - device_name: dome_observatoryname
-    ip: localhost:11111
+    ip: localhost
     device_number: 0
 FilterWheel:
   - device_name: fw_observatoryname
-    ip: localhost:11111
+    ip: localhost
     device_number: 0
 ObservingConditions:
   - device_name: weather_observatoryname
-    ip: localhost:11111
+    ip: localhost
     device_number: 0
     closing_limits:
       Humidity:
@@ -89,7 +89,7 @@ ObservingConditions:
         max: -35
 SafetyMonitor:
   - device_name: safety_observatoryname
-    ip: localhost:11111
+    ip: localhost
     device_number: 0
     max_safe_duration: 30
 

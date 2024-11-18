@@ -491,7 +491,6 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                 "value": "running" if obs.schedule_running else "stopped",
             },
             {"item": "weather safe", "value": "safe" if obs.weather_safe else "unsafe"},
-            {"item": "interrupt", "value": "on" if obs.interrupt else "off"},
             {
                 "item": "error source",
                 "value": "none" if len(obs.error_source) == 0 else "hover to see",
