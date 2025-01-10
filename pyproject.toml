@@ -20,15 +20,14 @@ dependencies = [
     "scipy==1.10.1",
     "twirl",
     "sqlite3worker",
-    "alpyca",
+    "alpyca @ git+https://github.com/ppp-one/alpyca.git",
     "psutil",
     "donuts",
     "httpx",
     "matplotlib",
     "pandas",
-    "fastapi",
+    "fastapi[standard]",
     "pyyaml",
-    "uvicorn[standard]",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +55,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.black]
 target-version = ["py39"]

@@ -850,13 +850,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # logging.basicConfig(
-    #     format="%(levelname)s,%(asctime)s.%(msecs)03d,%(process)d,%(name)s,(%(filename)s:%(lineno)d),%(message)s",
-    #     datefmt="%Y-%m-%d %H:%M:%S",
-    #     filename=CONFIG.file_log,
-    #     level=logging.DEBUG,
-    # )
-    # logging.Formatter.converter = time.gmtime
+    logging.basicConfig(
+        format="%(levelname)s,%(asctime)s.%(msecs)03d,%(process)d,%(name)s,(%(filename)s:%(lineno)d),%(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        filename=CONFIG.file_log,
+        level=logging.DEBUG,
+    )
+    logging.Formatter.converter = time.gmtime
 
     if args.debug:
         DEBUG = True
