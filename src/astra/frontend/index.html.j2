@@ -293,9 +293,7 @@
             const popupX = mouseX + padding;
             const popupY = mouseY + padding;
             const maxX = window.innerWidth - popupWidth - padding;
-            // const maxY = window.innerHeight - popupHeight - padding;
             const adjustedX = Math.min(popupX, maxX);
-            // const adjustedY = Math.min(popupY, maxY);
             popup.style.left = `${adjustedX}px`;
             popup.style.top = `${popupY}px`;
         }
@@ -416,14 +414,14 @@
                     let lines = text.split('\n');
 
                     // Check if there are 10 or more lines
-                    if (lines.length >= 16) {
+                    if (lines.length >= 10) {
                         // Split the lines into two groups for the columns
                         let mid = Math.ceil(lines.length / 2);
                         let firstColumn = lines.slice(0, mid).join('\n');
                         let secondColumn = lines.slice(mid).join('\n');
 
                         // Wrap the content in divs and add Tailwind classes
-                        popup.innerHTML = `<div class="columns-2 gap-8 align-top"><div>${firstColumn}</div><div>${secondColumn}</div></div>`;
+                        popup.innerHTML = `<div class="grid grid-cols-2 gap-8 align-top"><div>${firstColumn}</div><div>${secondColumn}</div></div>`;
                     } else {
                         // If less than 10 lines, just set the text
                         popup.innerHTML = text;
@@ -718,8 +716,8 @@
                     if (message['table1'][0]['value'] == true) {
                         // remove error free status
                         message['table1'].splice(0, 1);
-                        // remove weather safe, interrupt, error source
-                        message['table1'].splice(3, 3);
+                        // remove weather safe, error source
+                        message['table1'].splice(3, 2);
                     }
                 }
 
@@ -807,20 +805,13 @@
 
         {% endfor %}
 
-        // // for event listeners on all plots
+        // for event listeners on all plots
         const plots = document.querySelectorAll('svg[class^="plot-"]');
-        console.log("plots:", plots);
 
         plots.forEach((plot) => {
-            // console.log(plot);
-            // plot.addEventListener('input', (event) => {
-            //     console.log(event);
-            // });
-
             // when user takes finger off the screen
             plot.addEventListener("touchend", (event) => {
-                // console.log(event);
-                // clear the tooltip
+                // clear the tooltip -- needed for mobile UX
                 const pointerleave = new PointerEvent("pointerleave", {
                     bubbles: true,
                     pointerType: "mouse",
