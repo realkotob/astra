@@ -1303,6 +1303,7 @@ class Observatory:
             schedule_mtime = self.get_schedule_mtime()
 
             if (schedule_mtime > self.schedule_mtime) or (self.schedule is None):
+
                 if self.schedule_running is True:
                     self.logger.warning(
                         "Schedule updating while the previous schedule is running. This will not take effect until the new schedule is run."
@@ -1310,12 +1311,11 @@ class Observatory:
 
                 self.logger.info("Reading schedule")
 
-                # this is a safety but should never happen
-                if not self.schedule_path.exists():
-                    self.logger.warning(f"Not schedule found at {self.schedule_path}")
+                return process_schedule(
+                    self.schedule_path,
+                    truncate=self.truncate_schedule,
+                )
 
-                else:
-                    return process_schedule(self.schedule_path)
             else:
                 return self.schedule
 
@@ -1328,7 +1328,6 @@ class Observatory:
                 }
             )
             self.logger.error(f"Error reading schedule: {e}")
-            raise
 
     def get_schedule_mtime(self) -> float:
         """
@@ -1351,7 +1350,6 @@ class Observatory:
 
         """
 
-        # start schedule - if weather is not safe, only calibration sequences will run
         if self.schedule_running:
             self.logger.warning("Schedule already running")
             return
@@ -1445,7 +1443,6 @@ class Observatory:
             time.sleep(1)
 
         # run headers completion
-        self.logger.info("Completing headers")
         th = Thread(target=self.final_headers, daemon=True)
         th.start()
         self.threads.append(
@@ -1527,6 +1524,13 @@ class Observatory:
                 else:
                     # close all dome(s) and park telescope(s)
                     self.close_observatory()
+
+            elif "cool" == row["action_type"]:
+                if "Camera" in self.config:
+                    self.cool_camera(row, set_temperature, temperature_tolerance)
+
+            elif "complete_headers" == row["action_type"]:
+                self.final_headers()
 
             else:
 
@@ -2767,6 +2771,7 @@ class Observatory:
         """
 
         try:
+            self.logger.info("Completing headers")
             # get images from sql
             rows = self.cursor.execute("SELECT * FROM images WHERE complete_hdr = 0;")
             df_images = pd.DataFrame(
