@@ -28,7 +28,7 @@ from astra.schedule import process_schedule
 
 SQL3WLOGGER = logging.getLogger("sqlite3worker")
 SQL3WLOGGER.setLevel(logging.INFO)
-CONFIG = Config
+CONFIG = Config()
 
 # TODO (set 2024-07-20):
 # - move schedule things to schedule.py
