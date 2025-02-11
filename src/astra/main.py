@@ -161,6 +161,8 @@ async def heartbeat(observatory: str):
 def open_observatory(observatory: str):
     obs = OBSERVATORIES[observatory]
 
+    obs.logger.info(f"User initiated opening of observatory from web interface")
+
     obs.open_observatory()
 
     return {"status": "success", "data": "null", "message": ""}
@@ -169,6 +171,8 @@ def open_observatory(observatory: str):
 @app.get("/api/close/{observatory}")
 def close_observatory(observatory: str):
     obs = OBSERVATORIES[observatory]
+
+    obs.logger.info(f"User initiated closing of observatory from web interface")
 
     obs.close_observatory()
 
@@ -186,6 +190,8 @@ def cool_camera(observatory: str, device_name: str):
     set_temperature = obs.config["Camera"][cam_index]["temperature"]
     temperature_tolerance = obs.config["Camera"][cam_index]["temperature_tolerance"]
 
+    obs.logger.info(f"User initiated cooling of {device_name} from web interface")
+
     obs.cool_camera(
         row,
         set_temperature=set_temperature,
@@ -199,6 +205,8 @@ def cool_camera(observatory: str, device_name: str):
 def cool_camera(observatory: str):
     obs = OBSERVATORIES[observatory]
 
+    obs.logger.info(f"User initiated completion of headers from web interface")
+
     obs.final_headers()
 
     return {"status": "success", "data": "null", "message": ""}
@@ -207,6 +215,9 @@ def cool_camera(observatory: str):
 @app.get("/api/startwatchdog/{observatory}")
 async def start_watchdog(observatory: str):
     obs = OBSERVATORIES[observatory]
+
+    obs.logger.info(f"User initiated starting of watchdog from web interface")
+
     obs.error_free = True
     obs.error_source = []
     obs.start_watchdog()
@@ -217,6 +228,9 @@ async def start_watchdog(observatory: str):
 @app.get("/api/stopwatchdog/{observatory}")
 async def stop_watchdog(observatory: str):
     obs = OBSERVATORIES[observatory]
+
+    obs.logger.info(f"User initiated stopping of watchdog from web interface")
+
     obs.watchdog_running = False
 
     return {"status": "success", "data": "null", "message": ""}
@@ -225,6 +239,9 @@ async def stop_watchdog(observatory: str):
 @app.get("/api/startschedule/{observatory}")
 async def start_schedule(observatory: str):
     obs = OBSERVATORIES[observatory]
+
+    obs.logger.info(f"User initiated starting of schedule from web interface")
+
     obs.start_schedule()
 
     return {"status": "success", "data": "null", "message": ""}
@@ -233,6 +250,9 @@ async def start_schedule(observatory: str):
 @app.get("/api/stopschedule/{observatory}")
 async def stop_schedule(observatory: str):
     obs = OBSERVATORIES[observatory]
+
+    obs.logger.info(f"User initiated stopping of schedule from web interface")
+
     obs.schedule_running = False
 
     return {"status": "success", "data": "null", "message": ""}

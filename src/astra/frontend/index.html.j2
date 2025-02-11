@@ -231,7 +231,7 @@
                             {% for camera in configs[observatory]['Camera'] %}
                             <button
                                 class="text-white/50 text-sm font-medium rounded-xl aspect-square bg-gray-600/20 hover:bg-gray-700/20 px-5 py-2.5"
-                                onclick="coolCamera('{{observatory}}', '{{camera['device_name']}}')">
+                                onclick="coolCamera('{{observatory}}', '{{camera['device_name']}}', '{{camera['temperature']}}')">
 
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-1/2 h-1/2 mx-auto">
@@ -551,8 +551,8 @@
             }
         }
 
-        function coolCamera(observatory, device_name) {
-            if (confirm("Are you sure you want to cool down camera " + device_name + "?")) {
+        function coolCamera(observatory, device_name, temperature) {
+            if (confirm("Are you sure you want to cool down camera '" + device_name + "' to " + temperature + "C?")) {
                 fetch('/api/cool_camera/' + observatory + '/' + device_name)
                     .then(response => response.json())
                     .then(data => {
