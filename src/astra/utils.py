@@ -376,7 +376,7 @@ def pointing(filepath: str, ra: float, dec: float) -> Tuple[float, float, WCS, f
     # open image
     with fits.open(filepath) as hdu:
         header = hdu[0].header
-        data = hdu[0].data
+        data = hdu[0].data.astype(np.int16)
 
     # clean image
     sigma_clip = SigmaClip(sigma=3.0)

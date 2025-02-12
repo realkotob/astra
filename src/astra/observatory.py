@@ -16,6 +16,7 @@ import yaml
 from astropy.coordinates import EarthLocation, SkyCoord
 from astropy.io import fits
 from astropy.time import Time
+from astropy.wcs.utils import WCS
 
 # https://github.com/dashawn888/sqlite3worker
 from sqlite3worker import Sqlite3Worker
@@ -1982,7 +1983,7 @@ class Observatory:
         pointing_complete = False
         pointing_attempts = 0
         guiding = False
-        wcs = None
+        wcs_solve = None
 
         for i, exptime in enumerate(exptime_list):
             if not self.check_conditions(row):
@@ -2004,7 +2005,7 @@ class Observatory:
                     hdr,
                     folder,
                     log_option=log_option,
-                    wcs=wcs,
+                    wcs=wcs_solve,
                 )
 
                 if not success:
@@ -2012,19 +2013,19 @@ class Observatory:
 
                 # pointing correction if not already done
                 if action_value.get("pointing") and pointing_complete is False:
-                    pointing_complete, wcs = self.pointing_correction(
+                    pointing_complete, wcs_solve = self.pointing_correction(
                         row, action_value, filepath, paired_devices
                     )
 
                     pointing_attempts += 1
 
-                    if wcs is not None:
+                    if wcs_solve is not None:
                         with fits.open(filepath, mode="update") as hdul:
-                            hdul[0].header.update(wcs.to_header())
+                            hdul[0].header.update(wcs_solve.to_header())
                             hdul.flush()
 
                     if pointing_complete is False:
-                        wcs = (
+                        wcs_solve = (
                             None  # to not contaminate the next image if pointing fails
                         )
 
@@ -2059,7 +2060,7 @@ class Observatory:
 
     def pointing_correction(
         self, row: dict, action_value: dict, filepath: str, paired_devices: dict
-    ) -> None:
+    ) -> tuple[bool, WCS | None]:
         """
         Perform a pointing correction
         """
@@ -2067,10 +2068,10 @@ class Observatory:
             f"Running pointing correction for {action_value['object']} with {row['device_name']}"
         )
 
-        wcs = None
+        wcs_solve = None
 
         try:
-            offset_ra, offset_dec, wcs, angular_separation = utils.pointing(
+            offset_ra, offset_dec, wcs_solve, angular_separation = utils.pointing(
                 filepath, action_value["ra"], action_value["dec"]
             )
 
@@ -2080,7 +2081,7 @@ class Observatory:
                 f" with {row['device_name']}: {str(e)}"
             )
             pointing_complete = True
-            return pointing_complete
+            return (pointing_complete, wcs_solve)
 
         # get telescope index
         tel_index = [
@@ -2101,6 +2102,8 @@ class Observatory:
                 f"within threshold of {pointing_threshold*60:.2f}'"
             )
             pointing_complete = True
+
+            return (pointing_complete, wcs_solve)
         else:
             self.logger.info(
                 f"Pointing correction of {angular_separation.deg*60:.2f}' "
@@ -2109,40 +2112,40 @@ class Observatory:
             self.logger.info(f"RA shift: {offset_ra}")
             self.logger.info(f"DEC shift: {offset_dec}")
 
+            pointing_complete = False
+
             # sync telescope to corrected coordinates
             telescope = self.devices["Telescope"][paired_devices["Telescope"]]
 
-            new_ra = action_value["ra"] + offset_ra
-            new_dec = action_value["dec"] + offset_dec
+            new_ra = action_value["ra"] - offset_ra
+            new_dec = action_value["dec"] - offset_dec
 
-            # SPECULOOS EDIT
-            if self.speculoos:
-                # slew to target
-                self.logger.info(
-                    f"Slewing Telescope {paired_devices['Telescope']} to corrected position: {new_ra} {new_dec}"
-                )
-                telescope.get(
-                    "SlewToCoordinatesAsync",
-                    RightAscension=24 * new_ra / 360,
-                    Declination=new_dec,
-                )
+            # slew to target
+            self.logger.info(
+                f"Slewing Telescope {paired_devices['Telescope']} to corrected position: {new_ra} {new_dec}"
+            )
+            telescope.get(
+                "SlewToCoordinatesAsync",
+                RightAscension=24 * new_ra / 360,
+                Declination=new_dec,
+            )
 
-                time.sleep(1)
+            time.sleep(1)
 
-                # wait for slew to finish
-                self.wait_for_slew(paired_devices)
+            # wait for slew to finish
+            self.wait_for_slew(paired_devices)
 
-            else:
-                telescope.get(
-                    "SyncToCoordinates",
-                    RightAscension=24 * (new_ra) / 360,
-                    Declination=new_dec,
-                )
+            # if doing pointing model
+            #     telescope.get(
+            #         "SyncToCoordinates",
+            #         RightAscension=24 * (action_value["ra"] + offset_ra) / 360,
+            #         Declination=naction_value["dec"] + offset_dec,
+            #     )
 
-                # re-slew to target
-                self.setup_observatory(paired_devices, action_value)
+            #     # re-slew to target
+            #     self.setup_observatory(paired_devices, action_value)
 
-            return pointing_complete, wcs
+            return (pointing_complete, wcs_solve)
 
     def start_guider(
         self, row: dict, action_value: dict, folder: str, paired_devices: dict
