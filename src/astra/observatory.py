@@ -1643,6 +1643,8 @@ class Observatory:
                 hdr.get("LONG-OBS"),
                 action_value.get("dir"),
             )
+        else:
+            folder = None
 
         if "object" == row["action_type"]:
             hdr["IMAGETYP"] = "Light Frame"
@@ -2084,6 +2086,8 @@ class Observatory:
             row, paired_devices, create_folder=False
         )
 
+        action_value["object"] = "pointing_model"
+
         # create pointing_model folder
         folder = CONFIG.paths.images / "pointing_model"
         folder.mkdir(exist_ok=True)
@@ -2151,6 +2155,8 @@ class Observatory:
             else:
                 t_shift = 0
 
+            self.logger.info(f"Pointing model point {counter+1}/{N}")
+
             # move telescope to target
             action_value["ra"] = target_radec.ra.deg
             action_value["dec"] = target_radec.dec.deg
@@ -2210,7 +2216,7 @@ class Observatory:
 
         except Exception as e:
             self.logger.warning(
-                f"Error running pointing correction for {action_value['object']}"
+                f"Failed running pointing correction for {action_value['object']}"
                 f" with {row['device_name']}: {str(e)}"
             )
             pointing_complete = True
