@@ -1919,7 +1919,7 @@ class Observatory:
         # Log information about the exposure
         log_option_tmp = "" if log_option is None else f"{log_option} "
         self.logger.info(
-            f"Exposing {log_option_tmp}{row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']} s"
+            f"Exposing {log_option_tmp}{row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']:.3f} s"
         )
 
         # Start exposure
@@ -1937,13 +1937,13 @@ class Observatory:
 
             if (exposure_end_time - exposure_start_time) > 3 * exptime + 60:
                 self.logger.error(
-                    f"Exposure timed out after 3*{exptime} + 60 seconds for {row['device_name']}."
+                    f"Exposure timed out after 3*{exptime:.3f} + 60 seconds for {row['device_name']}."
                 )
                 self.error_source.append(
                     {
                         "device_type": "Camera",
                         "device_name": row["device_name"],
-                        "error": f"Exposure timed out after 3*{exptime} + 60 seconds",
+                        "error": f"Exposure timed out after 3*{exptime:.3f} + 60 seconds",
                     }
                 )
                 exposure_successful = False
@@ -1984,6 +1984,9 @@ class Observatory:
             )
             self.logger.info(
                 f"Image acquired in {(time.time() - exposure_start_time):.3f} s from when StartExposure was called"
+            )
+            self.logger.info(
+                f"Image acquired in {(time.time() - exposure_start_time - exptime):.3f} s from when exposure integration should have ended"
             )
 
             self.last_image = filepath
@@ -2426,6 +2429,9 @@ class Observatory:
 
         # wait for sun to be in right position
         sun_rising, take_flats, sun_altaz = utils.is_sun_rising(obs_location)
+        self.logger.info(
+            f"Sun at {sun_altaz.alt.degree:.2f} degrees and {'rising' if sun_rising else 'setting'}"
+        )
 
         if self.check_conditions(row) and (take_flats is False):
             self.logger.info(
@@ -2496,41 +2502,28 @@ class Observatory:
                 hdr["EXPTIME"] = exptime
                 hdr["FILTER"] = filter_name
 
-                self.logger.info(
-                    f"Exposing {count + 1}/{action_value['n'][i]} {row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']} s"
-                )
-                camera.get("StartExposure", Duration=exptime, Light=True)
-
                 while self.check_conditions(row) and (count < action_value["n"][i]):
-                    r = camera.get("ImageReady")
-                    time.sleep(
-                        0.1
-                    )  # add 0.1 s sleep to avoid spamming the camera and high cpu usage
-                    time.sleep(0)  # yield to other threads
-                    if r is True:
-                        self.logger.debug(
-                            f"Image ready from {row['device_name']} to download."
-                        )
 
-                        t0 = datetime.now(UTC)
+                    log_option = f"{count + 1}/{action_value['n'][i]}"
 
-                        # get last exposure start time
-                        r = camera.get("LastExposureStartTime")
-                        self.logger.debug(
-                            f"LastExposureStartTime from {row['device_name']} was {r}"
-                        )
-                        dateobs = pd.to_datetime(r)
+                    success, filepath = self.perform_exposure(
+                        camera,
+                        exptime,
+                        maxadu,
+                        row,
+                        hdr,
+                        folder,
+                        log_option=log_option,
+                    )
 
-                        # save image
-                        self.logger.debug(f"Saving image from {row['device_name']}")
-                        filename = self.save_image(
-                            camera, hdr, dateobs, t0, maxadu, folder
-                        )
+                    if not success:
+                        break
+                    else:
 
                         # move telescope to flat position
                         self.flats_position(obs_location, paired_devices, row)
 
-                        with fits.open(filename) as hdul:
+                        with fits.open(filepath) as hdul:
                             data = hdul[0].data
                             median_adu = np.nanmedian(data)
                             fraction = (median_adu - offset) / (target_adu[0] - offset)
@@ -2551,24 +2544,17 @@ class Observatory:
                                     or exptime > upper_exptime_limit
                                 ):
                                     self.logger.warning(
-                                        f"Exposure time of {exptime} s out of user defined range of {lower_exptime_limit} s to {upper_exptime_limit} s"
+                                        f"Exposure time of {exptime:.3f} s out of user defined range of {lower_exptime_limit} s to {upper_exptime_limit} s"
                                     )
                                     break
                                 else:
                                     self.logger.info(
-                                        f"Setting new exposure time to {exptime} s as median ADU of {median_adu} is not within {target_adu[1]} of {target_adu[0]}"
+                                        f"Setting new exposure time to {exptime:.3f} s as median ADU of {median_adu} is not within {target_adu[1]} of {target_adu[0]}"
                                     )
 
                         hdr["EXPTIME"] = exptime
 
                         count += 1
-
-                        if count < action_value["n"][i]:
-                            # start next exposure
-                            self.logger.info(
-                                f"Exposing {count + 1}/{action_value['n'][i]} {row['device_name']} {hdr['IMAGETYP']} for exposure time {hdr['EXPTIME']} s"
-                            )
-                            camera.get("StartExposure", Duration=exptime, Light=True)
 
             else:
                 if take_flats is False:
@@ -2615,55 +2601,21 @@ class Observatory:
                     time.sleep(1)
 
             if self.check_conditions(row) and take_flats:
-                self.logger.warning("checking observatory open")
-                # open observatory if not already open
-                self.open_observatory(paired_devices)
 
-                # move telescope to flat position
-                telescope = self.devices["Telescope"][paired_devices["Telescope"]]
-
-                # flat position
-                flat_position = SkyCoord(
+                target_altaz = SkyCoord(
                     alt=75 * u.deg,
                     az=sun_altaz.az + 180 * u.degree,
-                    obstime=Time.now(),
-                    location=obs_location,
-                    frame="altaz",
+                    frame=AltAz(obstime=Time.now(), location=obs_location),
                 )
 
-                self.logger.warning("setting tracking to false")
-                # set tracking to false
-                self.monitor_action(
-                    "Telescope",
-                    "Tracking",
-                    False,
-                    "Tracking",
-                    device_name=paired_devices["Telescope"],
-                    log_message=f"Setting Telescope {paired_devices['Telescope']} tracking to False",
-                )
+                target_radec = target_altaz.transform_to("icrs")
 
-                self.logger.warning("slewing to alt az")
-                # slew
-                telescope.get(
-                    "SlewToAltAzAsync",
-                    Azimuth=flat_position.az.deg,
-                    Altitude=flat_position.alt.deg,
-                )
+                action_value = {}
+                action_value["ra"] = target_radec.ra.deg
+                action_value["dec"] = target_radec.dec.deg
 
-                self.logger.warning("waiting for slew")
-                # wait for slew to finish
-                self.wait_for_slew(paired_devices)
-
-                self.logger.warning("setting tracking to true")
-                # return tracking to true
-                self.monitor_action(
-                    "Telescope",
-                    "Tracking",
-                    True,
-                    "Tracking",
-                    device_name=paired_devices["Telescope"],
-                    log_message=f"Setting Telescope {paired_devices['Telescope']} tracking to True",
-                )
+                # move telescope to target
+                self.setup_observatory(paired_devices, action_value)
 
     def flats_exptime(
         self,
@@ -2769,7 +2721,7 @@ class Observatory:
 
                         if exptime > upper_exptime_limit:
                             self.logger.warning(
-                                f"Exposure time of {exptime}s needed for next flat is greater than user defined limit of {upper_exptime_limit}s"
+                                f"Exposure time of {exptime:.3f}s needed for next flat is greater than user defined limit of {upper_exptime_limit}s"
                             )
                             if sun_rising is True:
                                 self.logger.info(
@@ -2791,7 +2743,7 @@ class Observatory:
 
                         elif exptime < lower_exptime_limit:
                             self.logger.warning(
-                                f"Exposure time of {exptime}s needed for next flat is lower than user defined limit of {lower_exptime_limit}s"
+                                f"Exposure time of {exptime:.3f}s needed for next flat is lower than user defined limit of {lower_exptime_limit}s"
                             )
 
                             if sun_rising is False:
@@ -2814,14 +2766,14 @@ class Observatory:
 
                         else:
                             self.logger.info(
-                                f"Exposure time of {exptime}s needed for next flat is within user defined tolerance"
+                                f"Exposure time of {exptime:.3f}s needed for next flat is within user defined tolerance"
                             )
                             getting_exptime = False
 
                     else:
                         if take_flats is True:
                             self.logger.info(
-                                f"Exposure time of {exptime}s needed for next flat is within user defined tolerance"
+                                f"Exposure time of {exptime:.3f}s needed for next flat is within user defined tolerance"
                             )
                         getting_exptime = False
 

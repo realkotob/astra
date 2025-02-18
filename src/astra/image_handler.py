@@ -128,11 +128,11 @@ def save_image(
     # create filename
     filter_name = hdr["FILTER"].replace("'", "")
     if hdr["IMAGETYP"] == "Light Frame":
-        filename = f"{device_name}_{filter_name}_{hdr['OBJECT']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+        filename = f"{device_name}_{filter_name}_{hdr['OBJECT']}_{hdr['EXPTIME']:.3f}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
     elif hdr["IMAGETYP"] in ["Bias Frame", "Dark Frame"]:
-        filename = f"{device_name}_{hdr['IMAGETYP']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+        filename = f"{device_name}_{hdr['IMAGETYP']}_{hdr['EXPTIME']:.3f}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
     else:
-        filename = f"{device_name}_{filter_name}_{hdr['IMAGETYP']}_{hdr['EXPTIME']}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
+        filename = f"{device_name}_{filter_name}_{hdr['IMAGETYP']}_{hdr['EXPTIME']:.3f}_{date.strftime('%Y%m%d_%H%M%S.%f')[:-3]}.fits"
 
     filepath = CONFIG.paths.images / folder / filename
 
