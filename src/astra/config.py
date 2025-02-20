@@ -206,7 +206,7 @@ class AssetPaths:
 class _ConfigInitialiser:
     """Initialises the configuration settings for Astra."""
 
-    DEFAULT_ASSETS_PATH = Path.home() / "astra"
+    DEFAULT_ASSETS_PATH = Path.home() / 'Documents' / "astra"
 
     @staticmethod
     def run(
