@@ -1164,14 +1164,19 @@ class Observatory:
             # SPECULOOS EDIT
             self.pause_polls(["Dome", "Telescope", "Focuser"])
 
-            # SPECULOOS EDIT  -- TODO: this should return a state before continuing (is this not satisfied by error_free?)
-            # check if dome already closed:
-            # for device_type in self.devices:
-            # polled_list[device_type] = {}
-
-            # for device_name in self.devices[device_type]:
-
-            # self.speculoos_check_and_ack_error(close=True)
+            # acknowledge errors if dome not closed, if any
+            if paired_devices is not None:
+                # acknowledge errors if dome not closed, if any
+                dome = self.devices["Dome"][paired_devices["Dome"]]
+                ShutterStatus = dome.get("ShutterStatus")
+                if ShutterStatus == 0:  # open
+                    self.speculoos_check_and_ack_error(close=True)
+            else:
+                for device_name in self.devices["Dome"]:
+                    dome = self.devices["Dome"][device_name]
+                    ShutterStatus = dome.get("ShutterStatus")
+                    if ShutterStatus == 0:  # open
+                        self.speculoos_check_and_ack_error(close=True)
 
         if "Telescope" in self.config:
             # stop telescope guiding and slewing
