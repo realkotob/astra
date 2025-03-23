@@ -1048,7 +1048,7 @@ class Observatory:
             # SPECULOOS EDIT
             self.pause_polls(["Dome", "Telescope", "Focuser"])
 
-            # SPECULOOS EDIT  -- TODO: this should return a state before continuing (is this not satisfied by error_free?)
+            # SPECULOOS EDIT
             self.speculoos_check_and_ack_error()
 
         if "Dome" in self.config:
@@ -1074,6 +1074,10 @@ class Observatory:
                             log_message=f"Opening Dome shutter of {device_name}",
                         )
 
+        if self.speculoos:
+            # SPECULOOS EDIT
+            self.speculoos_check_and_ack_error()
+
         if "Telescope" in self.config:
             if self.weather_safe and self.error_free:
                 # unpark telescope
@@ -1098,6 +1102,9 @@ class Observatory:
                         )
 
         if self.speculoos:
+            # SPECULOOS EDIT
+            self.speculoos_check_and_ack_error()
+
             # SPECULOOS EDIT
             self.resume_polls(["Dome", "Telescope", "Focuser"])
 
