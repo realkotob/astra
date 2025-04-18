@@ -631,7 +631,11 @@ class Guider:
 
                 # if no new images, wait for a bit
                 else:
-                    time.sleep(max(wait_time, 30))
+                    total_wait_time = max(wait_time, 30)
+                    elapsed_time = 0
+                    while elapsed_time < total_wait_time and self.running:
+                        time.sleep(0.1)
+                        elapsed_time += 0.1
 
         # return None values if self.running is False
         return None, None, None, None
@@ -716,7 +720,7 @@ class Guider:
                         current_field,
                         current_filter,
                         current_exptime,
-                    ) = self.waitForImage(n_images, camera_name, glob_str)
+                    ) = self.waitForImage(n_images, camera_name, glob_str, wait_time)
 
                     # to insure file is fully written to disc
                     time.sleep(1)
