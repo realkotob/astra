@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ruff", "black==24.3.0", "pytest"]
+dev = ["ruff", "black==24.3.0", "pytest", "toml"]
 test = ["pytest"]
 docs = [
     "matplotlib",
