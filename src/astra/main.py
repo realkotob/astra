@@ -268,7 +268,7 @@ async def roboticswitch(observatory: str):
 
     obs = OBSERVATORIES[observatory]
 
-    obs.logger.info(f"User initiated switching of robotics from web interface")
+    obs.logger.info(f"User initiated robotic switch from web interface")
 
     obs.toggle_robotic_switch()
 
