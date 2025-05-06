@@ -797,6 +797,7 @@ class Observatory:
                                 f"(SPECULOOS EDIT): Closing Dome due to no errors in Dome, but errors in Telescope"
                             )
                             for device_name in self.devices["Dome"]:
+                                self.speculoos_check_and_ack_error(close=True)
                                 self.monitor_action(
                                     "Dome",
                                     "ShutterStatus",
