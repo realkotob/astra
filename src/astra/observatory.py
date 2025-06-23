@@ -1973,6 +1973,18 @@ class Observatory:
             f"starting {row['start_time']} and ending {row['end_time']}",
         )
 
+        # Stop telescope tracking
+        if "Telescope" in paired_devices:
+            self.logger.info(f"Stopping telescope tracking for {paired_devices['Telescope']}")
+            self.monitor_action(
+                "Telescope",
+                "Tracking",
+                False,
+                "Tracking",
+                device_name=paired_devices["Telescope"],
+                log_message=f"Stopping telescope tracking for {paired_devices['Telescope']}",
+            )
+
     def pointing_correction(
         self, row: dict, action_value: dict, filepath: str, paired_devices: dict
     ) -> None:
