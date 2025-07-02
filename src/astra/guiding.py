@@ -357,184 +357,178 @@ class Guider:
         if gem:
             current_pierside = self.telescope.get("SideOfPier")
 
-        if True:
-            # get telescope declination to scale RA corrections
-            dec = self.telescope.get("Declination")
-            dec_rads = radians(dec)
-            cos_dec = cos(dec_rads)
-            # pop the earliest buffer value if > 30 measurements
-            while len(self.BUFF_X) > GUIDE_BUFFER_LENGTH:
-                self.BUFF_X.pop(0)
-            while len(self.BUFF_Y) > GUIDE_BUFFER_LENGTH:
-                self.BUFF_Y.pop(0)
-            assert len(self.BUFF_X) == len(self.BUFF_Y)
-            if images_to_stabilise < 0:
-                CURRENT_MAX_SHIFT = MAX_ERROR_PIXELS
-                # kill anything that is > sigma_buffer sigma buffer stats
-                if (
-                    len(self.BUFF_X) < GUIDE_BUFFER_LENGTH
-                    and len(self.BUFF_Y) < GUIDE_BUFFER_LENGTH
-                ):
-                    self.logMessageToDb(camera_name, "Filling AG stats buffer...")
-                    sigma_x = 0.0
-                    sigma_y = 0.0
-                else:
-                    sigma_x = np.std(self.BUFF_X)
-                    sigma_y = np.std(self.BUFF_Y)
-                    if (
-                        abs(x) > SIGMA_BUFFER * sigma_x
-                        or abs(y) > SIGMA_BUFFER * sigma_y
-                    ):
-                        self.logMessageToDb(
-                            camera_name,
-                            "Guide error > {} sigma * buffer errors, ignoring...".format(
-                                SIGMA_BUFFER
-                            ),
-                        )
-                        # store the original values in the buffer, even if correction
-                        # was too big, this will allow small outliers to be caught
-                        self.BUFF_X.append(x)
-                        self.BUFF_Y.append(y)
-                        return True, 0.0, 0.0, sigma_x, sigma_y
-                    else:
-                        pass
-            else:
-                self.logMessageToDb(
-                    camera_name, "Ignoring AG buffer during stabilisation"
-                )
-                CURRENT_MAX_SHIFT = MAX_ERROR_STABIL_PIXELS
+        # get telescope declination to scale RA corrections
+        dec = self.telescope.get("Declination")
+        dec_rads = radians(dec)
+        cos_dec = cos(dec_rads)
+        # pop the earliest buffer value if > 30 measurements
+        while len(self.BUFF_X) > GUIDE_BUFFER_LENGTH:
+            self.BUFF_X.pop(0)
+        while len(self.BUFF_Y) > GUIDE_BUFFER_LENGTH:
+            self.BUFF_Y.pop(0)
+        assert len(self.BUFF_X) == len(self.BUFF_Y)
+        if images_to_stabilise < 0:
+            CURRENT_MAX_SHIFT = MAX_ERROR_PIXELS
+            # kill anything that is > sigma_buffer sigma buffer stats
+            if (
+                len(self.BUFF_X) < GUIDE_BUFFER_LENGTH
+                and len(self.BUFF_Y) < GUIDE_BUFFER_LENGTH
+            ):
+                self.logMessageToDb(camera_name, "Filling AG stats buffer...")
                 sigma_x = 0.0
                 sigma_y = 0.0
+            else:
+                sigma_x = np.std(self.BUFF_X)
+                sigma_y = np.std(self.BUFF_Y)
+                if abs(x) > SIGMA_BUFFER * sigma_x or abs(y) > SIGMA_BUFFER * sigma_y:
+                    self.logMessageToDb(
+                        camera_name,
+                        "Guide error > {} sigma * buffer errors, ignoring...".format(
+                            SIGMA_BUFFER
+                        ),
+                    )
+                    # store the original values in the buffer, even if correction
+                    # was too big, this will allow small outliers to be caught
+                    self.BUFF_X.append(x)
+                    self.BUFF_Y.append(y)
+                    return True, 0.0, 0.0, sigma_x, sigma_y
+                else:
+                    pass
+        else:
+            self.logMessageToDb(camera_name, "Ignoring AG buffer during stabilisation")
+            CURRENT_MAX_SHIFT = MAX_ERROR_STABIL_PIXELS
+            sigma_x = 0.0
+            sigma_y = 0.0
 
-            # update the PID controllers, run them in parallel
-            pidx = self.PIDx.update(x) * -1
-            pidy = self.PIDy.update(y) * -1
+        # update the PID controllers, run them in parallel
+        pidx = self.PIDx.update(x) * -1
+        pidy = self.PIDy.update(y) * -1
 
-            # check if we are stabilising and allow for the max shift
-            if images_to_stabilise > 0:
-                if pidx >= CURRENT_MAX_SHIFT:
-                    pidx = CURRENT_MAX_SHIFT
-                elif pidx <= -CURRENT_MAX_SHIFT:
-                    pidx = -CURRENT_MAX_SHIFT
-                if pidy >= CURRENT_MAX_SHIFT:
-                    pidy = CURRENT_MAX_SHIFT
-                elif pidy <= -CURRENT_MAX_SHIFT:
-                    pidy = -CURRENT_MAX_SHIFT
-            self.logMessageToDb(
-                camera_name, "PID: {0:.2f}  {1:.2f}".format(float(pidx), float(pidy))
+        # check if we are stabilising and allow for the max shift
+        if images_to_stabilise > 0:
+            if pidx >= CURRENT_MAX_SHIFT:
+                pidx = CURRENT_MAX_SHIFT
+            elif pidx <= -CURRENT_MAX_SHIFT:
+                pidx = -CURRENT_MAX_SHIFT
+            if pidy >= CURRENT_MAX_SHIFT:
+                pidy = CURRENT_MAX_SHIFT
+            elif pidy <= -CURRENT_MAX_SHIFT:
+                pidy = -CURRENT_MAX_SHIFT
+        self.logMessageToDb(
+            camera_name, "PID: {0:.2f}  {1:.2f}".format(float(pidx), float(pidy))
+        )
+
+        # make another check that the post PID values are not > Max allowed
+        # using >= allows for the stabilising runs to get through
+        # abs() on -ve duration otherwise throws back an error
+        if pidy > 0 and pidy <= CURRENT_MAX_SHIFT and self.running:
+            guide_time_y = pidy * self.PIX2TIME["+y"] / binning
+
+            y_p_dir = self.DIRECTIONS["+y"]
+            if self.RA_AXIS == "y":
+                guide_time_y = guide_time_y / cos_dec
+
+                if gem and current_pierside == PierSide.pierEast:
+                    pass  # keep as is
+                else:
+                    if self.DIRECTIONS["+y"] == GuideDirections.guideWest:
+                        y_p_dir = GuideDirections.guideEast
+                    else:
+                        y_p_dir = GuideDirections.guideWest
+
+            self.telescope.get("PulseGuide")(
+                Direction=y_p_dir, Duration=int(guide_time_y)
             )
 
-            # make another check that the post PID values are not > Max allowed
-            # using >= allows for the stabilising runs to get through
-            # abs() on -ve duration otherwise throws back an error
-            if pidy > 0 and pidy <= CURRENT_MAX_SHIFT and self.running:
-                guide_time_y = pidy * self.PIX2TIME["+y"] / binning
+        if pidy < 0 and pidy >= -CURRENT_MAX_SHIFT and self.running:
+            guide_time_y = abs(pidy * self.PIX2TIME["-y"] / binning)
 
-                y_p_dir = self.DIRECTIONS["+y"]
-                if self.RA_AXIS == "y":
-                    guide_time_y = guide_time_y / cos_dec
+            y_n_dir = self.DIRECTIONS["-y"]
+            if self.RA_AXIS == "y":
+                guide_time_y = guide_time_y / cos_dec
 
-                    if gem and current_pierside == PierSide.pierEast:
-                        pass  # keep as is
+                if gem and current_pierside == PierSide.pierEast:
+                    pass  # keep as is
+                else:
+                    if self.DIRECTIONS["-y"] == GuideDirections.guideWest:
+                        y_n_dir = GuideDirections.guideEast
                     else:
-                        if self.DIRECTIONS["+y"] == GuideDirections.guideWest:
-                            y_p_dir = GuideDirections.guideEast
-                        else:
-                            y_p_dir = GuideDirections.guideWest
+                        y_n_dir = GuideDirections.guideWest
 
-                self.telescope.get("PulseGuide")(
-                    Direction=y_p_dir, Duration=int(guide_time_y)
+            self.telescope.get("PulseGuide")(
+                Direction=y_n_dir, Duration=int(guide_time_y)
+            )
+
+        start_time = time.time()
+        while self.telescope.get("IsPulseGuiding") and self.running:
+            if time.time() - start_time > IS_PULSE_GUIDING_TIMEOUT:
+                self.logger.warning(
+                    f"Pulse guiding timed out after {IS_PULSE_GUIDING_TIMEOUT} seconds."
                 )
+                break
+            time.sleep(0.01)
 
-            if pidy < 0 and pidy >= -CURRENT_MAX_SHIFT and self.running:
-                guide_time_y = abs(pidy * self.PIX2TIME["-y"] / binning)
+        if pidx > 0 and pidx <= CURRENT_MAX_SHIFT and self.running:
+            guide_time_x = pidx * self.PIX2TIME["+x"] / binning
 
-                y_n_dir = self.DIRECTIONS["-y"]
-                if self.RA_AXIS == "y":
-                    guide_time_y = guide_time_y / cos_dec
+            x_p_dir = self.DIRECTIONS["+x"]
+            if self.RA_AXIS == "x":
+                guide_time_x = guide_time_x / cos_dec
 
-                    if gem and current_pierside == PierSide.pierEast:
-                        pass  # keep as is
+                if gem and current_pierside == PierSide.pierEast:
+                    pass  # keep as is
+                else:
+                    if self.DIRECTIONS["+x"] == GuideDirections.guideWest:
+                        x_p_dir = GuideDirections.guideEast
                     else:
-                        if self.DIRECTIONS["-y"] == GuideDirections.guideWest:
-                            y_n_dir = GuideDirections.guideEast
-                        else:
-                            y_n_dir = GuideDirections.guideWest
+                        x_p_dir = GuideDirections.guideWest
 
-                self.telescope.get("PulseGuide")(
-                    Direction=y_n_dir, Duration=int(guide_time_y)
-                )
+            self.telescope.get("PulseGuide")(
+                Direction=x_p_dir, Duration=int(guide_time_x)
+            )
 
-            start_time = time.time()
-            while self.telescope.get("IsPulseGuiding") and self.running:
-                if time.time() - start_time > IS_PULSE_GUIDING_TIMEOUT:
-                    self.logger.warning(
-                        f"Pulse guiding timed out after {IS_PULSE_GUIDING_TIMEOUT} seconds."
-                    )
-                    break
-                time.sleep(0.01)
+        if pidx < 0 and pidx >= -CURRENT_MAX_SHIFT and self.running:
+            guide_time_x = abs(pidx * self.PIX2TIME["-x"] / binning)
 
-            if pidx > 0 and pidx <= CURRENT_MAX_SHIFT and self.running:
-                guide_time_x = pidx * self.PIX2TIME["+x"] / binning
+            x_n_dir = self.DIRECTIONS["-x"]
+            if self.RA_AXIS == "x":
+                guide_time_x = guide_time_x / cos_dec
 
-                x_p_dir = self.DIRECTIONS["+x"]
-                if self.RA_AXIS == "x":
-                    guide_time_x = guide_time_x / cos_dec
-
-                    if gem and current_pierside == PierSide.pierEast:
-                        pass  # keep as is
+                if gem and current_pierside == PierSide.pierEast:
+                    pass  # keep as is
+                else:
+                    if self.DIRECTIONS["-x"] == GuideDirections.guideWest:
+                        x_n_dir = GuideDirections.guideEast
                     else:
-                        if self.DIRECTIONS["+x"] == GuideDirections.guideWest:
-                            x_p_dir = GuideDirections.guideEast
-                        else:
-                            x_p_dir = GuideDirections.guideWest
+                        x_n_dir = GuideDirections.guideWest
 
-                self.telescope.get("PulseGuide")(
-                    Direction=x_p_dir, Duration=int(guide_time_x)
+            self.telescope.get("PulseGuide")(
+                Direction=x_n_dir, Duration=int(guide_time_x)
+            )
+
+        start_time = time.time()
+        while self.telescope.get("IsPulseGuiding") and self.running:
+            if time.time() - start_time > IS_PULSE_GUIDING_TIMEOUT:
+                self.logger.warning(
+                    f"Pulse guiding timed out after {IS_PULSE_GUIDING_TIMEOUT} seconds."
                 )
+                break
+            time.sleep(0.01)
 
-            if pidx < 0 and pidx >= -CURRENT_MAX_SHIFT and self.running:
-                guide_time_x = abs(pidx * self.PIX2TIME["-x"] / binning)
+        if self.running:
+            self.logMessageToDb(camera_name, "Guide correction Applied")
+        else:
+            self.logMessageToDb(
+                camera_name,
+                "Guide correction NOT Applied due to self.running=False",
+            )
 
-                x_n_dir = self.DIRECTIONS["-x"]
-                if self.RA_AXIS == "x":
-                    guide_time_x = guide_time_x / cos_dec
-
-                    if gem and current_pierside == PierSide.pierEast:
-                        pass  # keep as is
-                    else:
-                        if self.DIRECTIONS["-x"] == GuideDirections.guideWest:
-                            x_n_dir = GuideDirections.guideEast
-                        else:
-                            x_n_dir = GuideDirections.guideWest
-
-                self.telescope.get("PulseGuide")(
-                    Direction=x_n_dir, Duration=int(guide_time_x)
-                )
-
-            start_time = time.time()
-            while self.telescope.get("IsPulseGuiding") and self.running:
-                if time.time() - start_time > IS_PULSE_GUIDING_TIMEOUT:
-                    self.logger.warning(
-                        f"Pulse guiding timed out after {IS_PULSE_GUIDING_TIMEOUT} seconds."
-                    )
-                    break
-                time.sleep(0.01)
-
-            if self.running:
-                self.logMessageToDb(camera_name, "Guide correction Applied")
-            else:
-                self.logMessageToDb(
-                    camera_name,
-                    "Guide correction NOT Applied due to self.running=False",
-                )
-
-            # store the original values in the buffer
-            # only if we are not stabilising
-            if images_to_stabilise < 0:
-                self.BUFF_X.append(x)
-                self.BUFF_Y.append(y)
-            return True, pidx, pidy, sigma_x, sigma_y
+        # store the original values in the buffer
+        # only if we are not stabilising
+        if images_to_stabilise < 0:
+            self.BUFF_X.append(x)
+            self.BUFF_Y.append(y)
+        return True, pidx, pidy, sigma_x, sigma_y
 
     def getReferenceImage(self, field, filt, exptime, camera, pierside):
         """
