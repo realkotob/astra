@@ -2,12 +2,12 @@ import glob as g
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 from math import cos, radians
 from shutil import copyfile
 
 import numpy as np
-from alpaca.telescope import GuideDirections
+from alpaca.telescope import GuideDirections, AlignmentModes, PierSide
 from astropy.io import fits
 from astropy.stats import SigmaClip
 from donuts import Donuts
@@ -27,6 +27,9 @@ FIELD_KEYWORD = "OBJECT"
 
 # header keyword for the current exposure time
 EXPTIME_KEYWORD = "EXPTIME"
+
+# header keyword for the current PIERSIDE
+PIERSIDE_KEYWORD = "PIERSIDE"
 
 # rejection buffer length
 GUIDE_BUFFER_LENGTH = 20
@@ -142,10 +145,11 @@ class Guider:
         db_command_0 = """CREATE TABLE IF NOT EXISTS autoguider_ref (
                 ref_id mediumint auto_increment primary key,
                 field varchar(100) not null,
-                telescope varchar(20) not null,
+                camera varchar(20) not null,
                 ref_image varchar(100) not null,
                 filter varchar(20) not null,
                 exptime varchar(20) not null,
+                pierside int not null,
                 valid_from datetime not null,
                 valid_until datetime
                 );"""
@@ -176,7 +180,7 @@ class Guider:
         db_command_2 = """CREATE TABLE IF NOT EXISTS autoguider_info_log (
                 message_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                telescope varchar(20) NOT NULL,
+                camera varchar(20) NOT NULL,
                 message varchar(500) NOT NULL
                 );
                 """
@@ -219,7 +223,7 @@ class Guider:
 
         Parameters
         ----------
-        telescope : str
+        camera_name : str
             Name of the instrument being autoguided
         message : str
             Output message to log
@@ -234,7 +238,7 @@ class Guider:
         """
         qry = """
             INSERT INTO autoguider_info_log
-            (telescope, message)
+            (camera, message)
             VALUES
             ('%s', '%s')
             """
@@ -302,7 +306,7 @@ class Guider:
         with open(logfile, "a") as outfile:
             outfile.write("{}\n".format(line))
 
-    def guide(self, x, y, images_to_stabilise, camera_name, gem=False):
+    def guide(self, x, y, images_to_stabilise, camera_name, binning=1, gem=False):
         """
         Generic autoguiding command with built-in PID control loop
         guide() will track recent autoguider corrections and ignore
@@ -325,13 +329,12 @@ class Guider:
             If -ve, field has stabilised
             If +ve allow for bigger shifts and do not append
             ag values to buffers
+        camera_name : string
+            Name of the camera being used for autoguiding
+        binning : int
+            Binning factor for the images (default is 1)
         gem : boolean
-            Are we using a German Equatorial Mount?
-            Default = False
-            If so, the side of the pier matters for correction
-            directions. Ping the mount for pierside before applying
-            a correction. If this turns out to be slow, we can do so
-            only when in the HA range for a pier flip
+            Is the telescope in German equatorial mode?
 
         Returns
         -------
@@ -351,8 +354,10 @@ class Guider:
         None
         """
 
-        connected = self.telescope.get("Connected")
-        if connected:
+        if gem:
+            current_pierside = self.telescope.get("SideOfPier")
+
+        if True:
             # get telescope declination to scale RA corrections
             dec = self.telescope.get("Declination")
             dec_rads = radians(dec)
@@ -423,18 +428,41 @@ class Guider:
             # using >= allows for the stabilising runs to get through
             # abs() on -ve duration otherwise throws back an error
             if pidy > 0 and pidy <= CURRENT_MAX_SHIFT and self.running:
-                guide_time_y = pidy * self.PIX2TIME["+y"]
+                guide_time_y = pidy * self.PIX2TIME["+y"] / binning
+
+                y_p_dir = self.DIRECTIONS["+y"]
                 if self.RA_AXIS == "y":
                     guide_time_y = guide_time_y / cos_dec
+
+                    if gem and current_pierside == PierSide.pierEast:
+                        pass  # keep as is
+                    else:
+                        if self.DIRECTIONS["+y"] == GuideDirections.guideWest:
+                            y_p_dir = GuideDirections.guideEast
+                        else:
+                            y_p_dir = GuideDirections.guideWest
+
                 self.telescope.get("PulseGuide")(
-                    Direction=self.DIRECTIONS["+y"], Duration=int(guide_time_y)
+                    Direction=y_p_dir, Duration=int(guide_time_y)
                 )
+
             if pidy < 0 and pidy >= -CURRENT_MAX_SHIFT and self.running:
-                guide_time_y = abs(pidy * self.PIX2TIME["-y"])
+                guide_time_y = abs(pidy * self.PIX2TIME["-y"] / binning)
+
+                y_n_dir = self.DIRECTIONS["-y"]
                 if self.RA_AXIS == "y":
                     guide_time_y = guide_time_y / cos_dec
+
+                    if gem and current_pierside == PierSide.pierEast:
+                        pass  # keep as is
+                    else:
+                        if self.DIRECTIONS["-y"] == GuideDirections.guideWest:
+                            y_n_dir = GuideDirections.guideEast
+                        else:
+                            y_n_dir = GuideDirections.guideWest
+
                 self.telescope.get("PulseGuide")(
-                    Direction=self.DIRECTIONS["-y"], Duration=int(guide_time_y)
+                    Direction=y_n_dir, Duration=int(guide_time_y)
                 )
 
             start_time = time.time()
@@ -447,19 +475,41 @@ class Guider:
                 time.sleep(0.01)
 
             if pidx > 0 and pidx <= CURRENT_MAX_SHIFT and self.running:
-                guide_time_x = pidx * self.PIX2TIME["+x"]
+                guide_time_x = pidx * self.PIX2TIME["+x"] / binning
+
+                x_p_dir = self.DIRECTIONS["+x"]
                 if self.RA_AXIS == "x":
                     guide_time_x = guide_time_x / cos_dec
+
+                    if gem and current_pierside == PierSide.pierEast:
+                        pass  # keep as is
+                    else:
+                        if self.DIRECTIONS["+x"] == GuideDirections.guideWest:
+                            x_p_dir = GuideDirections.guideEast
+                        else:
+                            x_p_dir = GuideDirections.guideWest
+
                 self.telescope.get("PulseGuide")(
-                    Direction=self.DIRECTIONS["+x"], Duration=int(guide_time_x)
+                    Direction=x_p_dir, Duration=int(guide_time_x)
                 )
 
             if pidx < 0 and pidx >= -CURRENT_MAX_SHIFT and self.running:
-                guide_time_x = abs(pidx * self.PIX2TIME["-x"])
+                guide_time_x = abs(pidx * self.PIX2TIME["-x"] / binning)
+
+                x_n_dir = self.DIRECTIONS["-x"]
                 if self.RA_AXIS == "x":
                     guide_time_x = guide_time_x / cos_dec
+
+                    if gem and current_pierside == PierSide.pierEast:
+                        pass  # keep as is
+                    else:
+                        if self.DIRECTIONS["-x"] == GuideDirections.guideWest:
+                            x_n_dir = GuideDirections.guideEast
+                        else:
+                            x_n_dir = GuideDirections.guideWest
+
                 self.telescope.get("PulseGuide")(
-                    Direction=self.DIRECTIONS["-x"], Duration=int(guide_time_x)
+                    Direction=x_n_dir, Duration=int(guide_time_x)
                 )
 
             start_time = time.time()
@@ -485,12 +535,8 @@ class Guider:
                 self.BUFF_X.append(x)
                 self.BUFF_Y.append(y)
             return True, pidx, pidy, sigma_x, sigma_y
-        else:
-            self.logMessageToDb(camera_name, "Telescope NOT connected!")
-            self.logMessageToDb(camera_name, "Ignoring corrections!")
-            return False, 0.0, 0.0, 0.0, 0.0
 
-    def getReferenceImage(self, field, filt, exptime):
+    def getReferenceImage(self, field, filt, exptime, camera, pierside):
         """
         Look in the database for the current
         field/filter reference image
@@ -501,6 +547,12 @@ class Guider:
             name of the current field
         filt : string
             name of the current filter
+        exptime : string
+            exposure time of the current image
+        camera : string
+            name of the camera
+        pierside : int
+            telescope side of pier (1 = West, 0 = East, -1 = Unknown)
 
         Returns
         -------
@@ -512,7 +564,7 @@ class Guider:
         ------
         None
         """
-        tnow = datetime.utcnow().isoformat().split(".")[0].replace("T", " ")
+        tnow = datetime.now(UTC).isoformat().split(".")[0].replace("T", " ")
         qry = """
             SELECT ref_image
             FROM autoguider_ref
@@ -520,9 +572,11 @@ class Guider:
             AND filter = '%s'
             AND exptime = '%s'
             AND valid_from < '%s'
+            AND camera = '%s'
+            AND pierside = %d
             AND valid_until IS NULL
             """
-        qry_args = (field, filt, exptime, tnow)
+        qry_args = (field, filt, exptime, tnow, camera, pierside)
 
         result = self.cursor.execute(qry % qry_args)
 
@@ -532,7 +586,7 @@ class Guider:
             ref_image = os.path.join(self.reference_dir, result[0][0])
         return ref_image
 
-    def setReferenceImage(self, field, filt, exptime, ref_image, telescope):
+    def setReferenceImage(self, field, filt, exptime, ref_image, camera, pierside):
         """
         Set a new image as a reference in the database
 
@@ -544,8 +598,10 @@ class Guider:
             name of the current filter
         ref_image : string
             name of the image to set as reference
-        telescope : string
-            name of the telescope
+        camera : string
+            name of the camera
+        pierside : int
+            telescope side of pier (1 = West, 0 = East, -1 = Unknown)
 
         Returns
         -------
@@ -553,15 +609,23 @@ class Guider:
         Raises
         ------
         """
-        tnow = datetime.utcnow().isoformat().split(".")[0].replace("T", " ")
+        tnow = datetime.now(UTC).isoformat().split(".")[0].replace("T", " ")
         qry = """
             INSERT INTO autoguider_ref
-            (field, telescope, ref_image,
-            filter, exptime, valid_from)
+            (field, camera, ref_image,
+            filter, exptime, valid_from, pierside)
             VALUES
-            ('%s', '%s', '%s', '%s', '%s', '%s')
+            ('%s', '%s', '%s', '%s', '%s', '%s', %d)
             """
-        qry_args = (field, telescope, os.path.split(ref_image)[-1], filt, exptime, tnow)
+        qry_args = (
+            field,
+            camera,
+            os.path.split(ref_image)[-1],
+            filt,
+            exptime,
+            tnow,
+            pierside,
+        )
         self.cursor.execute(qry % qry_args)
 
         # copy the file to the autoguider_ref location
@@ -578,6 +642,12 @@ class Guider:
         ----------
         n_images : int
             number of images previously acquired
+        camera_name : str
+            Name of the camera being used for autoguiding
+        glob_str : str
+            Glob string to match the images in the directory
+        wait_time : int
+            Time to wait for new images in seconds
 
 
         Returns
@@ -588,6 +658,8 @@ class Guider:
             name of the newest field
         newest_filter : string
             name of the newest filter
+        newest_exptime : string
+            exposure time of the newest image
 
         Raises
         ------
@@ -647,20 +719,44 @@ class Guider:
         # return None values if self.running is False
         return None, None, None, None
 
-    def guider_loop(self, camera_name, glob_str, wait_time=10):
+    def guider_loop(self, camera_name, glob_str, wait_time=10, binning=1):
+        """
+        Main loop for the guider.
+
+        Parameters
+        ----------
+        camera_name : str
+            Name of the camera being used for autoguiding
+        glob_str : str
+            Glob string to match the images in the directory
+        wait_time : int
+            Time to wait for new images in seconds
+        binning : int
+            Binning factor for the images (default is 1)
+
+        Returns
+        -------
+        None
+        """
         self.running = True
 
         self.logger.info(f"Starting guider loop for: {glob_str} images")
 
         try:
             while self.running:
+                # check telescope alignment mode
+                gem = (
+                    self.telescope.get("AlignmentMode") == AlignmentModes.algGermanPolar
+                )
+
+                telescope_pierside = self.telescope.get("SideOfPier")
+
                 # get a list of the images in the directory
                 templist = g.glob(glob_str)
 
                 # take directory of glob_str and add logfile name
                 LOGFILE = os.path.join(os.path.dirname(glob_str), "guider.log")
 
-                # TODO: change location of logfile and detect if it already exists
                 self.logShiftsToFile(LOGFILE, [], header=True)
 
                 # check for any data in there
@@ -682,7 +778,11 @@ class Guider:
                         current_exptime = ff[0].header[EXPTIME_KEYWORD]
                         # Look for a reference image for this field/filter
                         ref_file = self.getReferenceImage(
-                            current_field, current_filter, current_exptime
+                            current_field,
+                            current_filter,
+                            current_exptime,
+                            camera_name,
+                            telescope_pierside,
                         )
                         # if there is no reference image, set this one as it and continue
                         # set the previous reference image
@@ -693,6 +793,7 @@ class Guider:
                                 current_exptime,
                                 last_file,
                                 camera_name,
+                                telescope_pierside,
                             )
                             ref_file = os.path.join(
                                 self.reference_dir, os.path.basename(last_file)
@@ -731,6 +832,21 @@ class Guider:
 
                     # to insure file is fully written to disc
                     time.sleep(1)
+
+                    # check still same pierside, else reset loop?
+                    if gem:
+                        current_pierside = self.telescope.get("SideOfPier")
+                        if current_pierside != telescope_pierside:
+                            self.logMessageToDb(
+                                camera_name,
+                                "Pierside changed from {} to {}, resetting guider loop...".format(
+                                    telescope_pierside, current_pierside
+                                ),
+                            )
+                            self.logger.info(
+                                f"Pierside changed from {telescope_pierside} to {current_pierside}, resetting guider loop..."
+                            )
+                            break
 
                     if self.running is True:
                         self.logMessageToDb(
@@ -869,14 +985,9 @@ class Guider:
                                     pre_pid_y,
                                     images_to_stabilise,
                                     camera_name,
+                                    binning,
+                                    gem,
                                 )
-                                # !applied means no telescope, break to tomorrow
-                                if not applied:
-                                    self.logMessageToDb(
-                                        camera_name,
-                                        "SHIFT NOT APPLIED, TELESCOPE *NOT* CONNECTED, EXITING",
-                                    )
-                                    self.running = False
                             else:
                                 break
 

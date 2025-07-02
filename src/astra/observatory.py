@@ -2518,9 +2518,16 @@ class Observatory:
             f"{row['device_name']}_{filter_name}_{action_value['object']}_{action_value['exptime']:.3f}_*.fits",
         )  # be careful with if custom naming is used
 
+        binning = paired_devices.camera.get("BinX")
+
         th = Thread(
             target=self.guider[paired_devices["Telescope"]].guider_loop,
-            args=(paired_devices["Camera"], glob_str, action_value["exptime"] * 2),
+            args=(
+                paired_devices["Camera"],
+                glob_str,
+                action_value["exptime"] * 2,
+                binning,
+            ),
             daemon=True,
         )
         th.start()
