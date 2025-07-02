@@ -67,7 +67,7 @@ TEL-DVER,str,true,Telescope,DriverVersion,Telescope driver version
 TRACKING,bool,false,Telescope,Tracking,Tracking
 SLEWING,bool,false,Telescope,Slewing,Slewing
 TELPARK,bool,false,Telescope,AtPark,Telescope at park
-PIERSIDE,bool,false,Telescope,SideOfPier,ASCOM Telescope side of pier (1 = West, 0 = East)
+PIERSIDE,bool,false,Telescope,SideOfPier,ASCOM Telescope side of pier (1 = West 0 = East)
 ,,,,,
 DOMEAZ,float,false,Dome,Azimuth,[deg] Dome azimuth in horizontal coordinates
 DOMESTAT,int,false,Dome,ShutterStatus,Dome shutter status
