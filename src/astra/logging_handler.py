@@ -12,7 +12,7 @@ class LoggingHandler(logging.Handler):
         if record.levelno == logging.ERROR:
             self.instance.error_free = False
 
-        # print(f"[{record.levelname}] {record.msg} {str(record.exc_info)}")
+        print(f"[{record.levelname}] {record.msg} {str(record.exc_info)}")
 
         dt_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         level = record.levelname.lower()

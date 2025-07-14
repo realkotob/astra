@@ -311,7 +311,7 @@ class Observatory:
         """
 
         db_name = CONFIG.paths.logs / f"{self.name}.db"
-        cursor = Sqlite3Worker(db_name, max_queue_size=200)
+        cursor = Sqlite3Worker(db_name, max_queue_size=2000)
 
         db_command_0 = """CREATE TABLE IF NOT EXISTS polling (
                 device_type   TEXT,
@@ -4430,12 +4430,13 @@ class Observatory:
                 self.threads = [i for i in self.threads if i["thread"].is_alive()]
 
             except Exception as e:
+                error_text = f"{type(e).__name__}: {e}"
                 self.error_source.append(
                     {
                         "device_type": "Queue",
                         "device_name": "queue_get",
-                        "error": str(e),
+                        "error": error_text,
                     }
                 )
-                self.logger.error(f"Queue get error: {str(e)}")
+                self.logger.error(f"Queue get error: {error_text}", exc_info=True, stack_info=True)
                 self.queue_running = False
