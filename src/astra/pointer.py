@@ -361,7 +361,9 @@ class PointingCorrectionHandler:
         dateobs = pd.to_datetime(header["DATE-OBS"])
         plate_scale = np.arctan(
             (header["XPIXSZ"] * 1e-6) / (header["FOCALLEN"] * 1e-3)
-        ) * (180 / np.pi)  # deg/pixel
+        ) * (
+            180 / np.pi
+        )  # deg/pixel
         return dateobs, plate_scale
 
     @staticmethod
@@ -388,7 +390,7 @@ class PointingCorrectionHandler:
         med_clean = ndimage.median_filter(bkg_clean, size=5, mode="mirror")
         band_corr = np.median(med_clean, axis=1).reshape(-1, 1)
         image_clean = med_clean - band_corr
-        image_clean = np.clip(image_clean, 0, None)
+        image_clean = np.clip(image_clean, 1, None)
 
         return image_clean
 
