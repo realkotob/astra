@@ -390,9 +390,9 @@ async def polling(
 
 
 @app.get("/api/log/{observatory}")
-async def log(observatory: str, datetime: str):
+async def log(observatory: str, datetime: str, limit: int = 100):
     db = observatory_db(observatory)
-    q = f"""SELECT * FROM (SELECT * FROM log WHERE datetime < '{datetime}' ORDER BY datetime DESC LIMIT 100) a ORDER BY datetime ASC"""
+    q = f"""SELECT * FROM (SELECT * FROM log WHERE datetime < '{datetime}' ORDER BY datetime DESC LIMIT {limit}) a ORDER BY datetime ASC"""
 
     df = pd.read_sql_query(q, db)
 
