@@ -671,6 +671,7 @@ async def websocket_endpoint(websocket: WebSocket, observatory: str):
                             "valid": valid,
                             "last_update": f"{last_update:.0f} s ago",
                             "polled": polled,
+                            "filter_names": FWS[observatory][device_name],
                         }
                     )
 
