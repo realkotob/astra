@@ -2886,7 +2886,7 @@ class Observatory:
         folder.mkdir(exist_ok=True)
 
         # number of points
-        N = action_value.get("n", 20)
+        N = action_value.get("n", 100)
 
         # set exptime to 1 if not specified
         exptime = action_value.get("exptime", 1)  # default to 1 second
@@ -2957,7 +2957,7 @@ class Observatory:
 
             if self.speculoos:
                 # wait for telescope to settle
-                time.sleep(exptime * 3)  # for spirit
+                time.sleep(exptime * 2)  # for spirit
 
             # perform exposure
             success, filepath = self.perform_exposure(
