@@ -428,7 +428,7 @@ class Guider:
             if self.RA_AXIS == "y":
                 guide_time_y = guide_time_y / cos_dec
 
-                if gem and current_pierside == PierSide.pierEast:
+                if current_pierside == PierSide.pierEast:
                     pass  # keep as is
                 else:
                     if self.DIRECTIONS["+y"] == GuideDirections.guideWest:
@@ -447,7 +447,7 @@ class Guider:
             if self.RA_AXIS == "y":
                 guide_time_y = guide_time_y / cos_dec
 
-                if gem and current_pierside == PierSide.pierEast:
+                if current_pierside == PierSide.pierEast:
                     pass  # keep as is
                 else:
                     if self.DIRECTIONS["-y"] == GuideDirections.guideWest:
@@ -475,7 +475,7 @@ class Guider:
             if self.RA_AXIS == "x":
                 guide_time_x = guide_time_x / cos_dec
 
-                if gem and current_pierside == PierSide.pierEast:
+                if current_pierside == PierSide.pierEast:
                     pass  # keep as is
                 else:
                     if self.DIRECTIONS["+x"] == GuideDirections.guideWest:
@@ -494,7 +494,7 @@ class Guider:
             if self.RA_AXIS == "x":
                 guide_time_x = guide_time_x / cos_dec
 
-                if gem and current_pierside == PierSide.pierEast:
+                if current_pierside == PierSide.pierEast:
                     pass  # keep as is
                 else:
                     if self.DIRECTIONS["-x"] == GuideDirections.guideWest:
@@ -742,6 +742,9 @@ class Guider:
                 gem = (
                     self.telescope.get("AlignmentMode") == AlignmentModes.algGermanPolar
                 )
+
+                if gem:
+                    self.logger.info("Telescope is in German equatorial mode")
 
                 telescope_pierside = self.telescope.get("SideOfPier")
 
