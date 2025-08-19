@@ -74,15 +74,14 @@ class CustomImageClass(Image):
 
 
 class Guider:
-    def __init__(
-        self, telescope: object, cursor: object, logger: logging.Logger, params: dict
-    ):
+    def __init__(self, telescope: object, astra: "Astra", params: dict):
         # TODO: camera angle?
 
         # pass in objects from astra
         self.telescope = telescope
-        self.cursor = cursor
-        self.logger = logger
+        self.cursor: object = astra.cursor
+        self.logger: logging.Logger = astra.logger
+        self.error_source: list = astra.error_source
 
         # set up the database
         self.create_tables()  # this is assuming we're using the same db.  Should we have a separate one for guiding?
@@ -107,8 +106,15 @@ class Guider:
             elif params["DIRECTIONS"][direction] == "West":
                 self.DIRECTIONS[direction] = GuideDirections.guideWest
             else:
+                self.error_source.append(
+                    {
+                        "device_type": "Guider",
+                        "device_name": self.telescope.device_name,
+                        "error": f"Invalid guide direction {params['DIRECTIONS'][direction]}",
+                    }
+                )
                 self.logger.error(
-                    f"Invalid guide direction {self.DIRECTIONS[direction]}"
+                    f"Invalid guide direction {params['DIRECTIONS'][direction]} for {self.telescope.device_name} config"
                 )
 
         # RA axis alignment along x or y? TODO: can be inferred from telescope direction
@@ -1032,6 +1038,13 @@ class Guider:
                         n_images = len(templist)
         except Exception as e:
             self.running = False
+            self.error_source.append(
+                {
+                    "device_type": "Guider",
+                    "device_name": self.telescope.device_name,
+                    "error": f"Error in guide loop: {str(e)}",
+                }
+            )
             self.logger.error(
                 f"Error in guide loop: {str(e)}", exc_info=True, stack_info=True
             )
