@@ -55,6 +55,7 @@ ObservingConditions:
   - device_name: weather_observatoryname
     ip: localhost
     device_number: 0
+    polling_delay: 5
     closing_limits:
       Humidity:
         - upper: 70

@@ -525,7 +525,6 @@ class Observatory:
 
         self.logger.info("Starting polling non-fixed fits headers")
 
-        delay = 5  # seconds
         # start polling non-fixed fits headers
         for i, row in self.fits_config.iterrows():
             if (
@@ -536,6 +535,17 @@ class Observatory:
                 if device_type in self.devices:
                     for device_name in self.devices[device_type]:
                         device = self.devices[device_type][device_name]
+
+                        # find polling delay in self.config
+                        delay = next(
+                            (
+                                d.get("polling_delay", 5)
+                                for d in self.config[device_type]
+                                if d["device_name"] == device_name
+                            ),
+                            5,  # default fallback if device not found
+                        )
+
                         try:
                             device.start_poll(
                                 row["device_command"], delay
@@ -826,8 +836,6 @@ class Observatory:
                             if weather_log_warning is False:
                                 self.logger.warning("Weather unsafe from SafetyMonitor")
 
-                            self.close_observatory()  # checks if already closed and closes if not
-
                         # check weather history for weather unsafe
                         rows = self.cursor.execute(
                             f"SELECT COUNT(*), MAX(datetime) FROM polling WHERE device_type = 'SafetyMonitor' AND device_value = 'False' AND datetime > datetime('now', '-{max_safe_duration} minutes')"
@@ -852,8 +860,6 @@ class Observatory:
                             self.logger.warning(
                                 "Weather unsafe from internal safety monitor"
                             )
-
-                        self.close_observatory()  # checks if already closed and closes if not
 
                     # set time_to_safe if weather unsafe
                     if rows[0][0] > 0 or internal_time_to_safe > 0:
@@ -889,9 +895,8 @@ class Observatory:
                             self.logger.info(
                                 f"Weather safe for the last {max(max_safe_duration, internal_max_safe_duration)} minutes"
                             )
-                            weather_log_warning = (
-                                False  # reset weather_log_warning flag
-                            )
+                            # reset weather_log_warning flag
+                            weather_log_warning = False
                     elif (
                         rows[0][0] > 0 and internal_safety
                     ):  # just in case isSafe value switches during realtime check
@@ -904,10 +909,11 @@ class Observatory:
                                 "Are the internal safety monitor limits higher than SafetyMonitor values?"
                             )
                             weather_log_warning = True
-
-                        self.close_observatory()  # checks if already closed and closes if not
                     else:
                         weather_log_warning = True
+
+                    if self.weather_safe is False:
+                        self.close_observatory()
 
                 except Exception as e:
                     self.error_source.append(
@@ -1569,8 +1575,8 @@ class Observatory:
             )
             for device_name in device_names:
                 try:
-                    if self.guider[device_name].running:
-                        self.guider[device_name].running = False
+                    self.stop_guider(device_name)
+
                 except Exception as e:
                     self.error_source.append(
                         {
@@ -2817,12 +2823,8 @@ class Observatory:
                     )
 
         # stop guiding at end of sequence
-        if action_value.get("guiding"):
-            if self.guider[paired_devices["Telescope"]].running:
-                self.logger.info(
-                    f"Stopping telescope {paired_devices['Telescope']} guiding"
-                )
-                self.guider[paired_devices["Telescope"]].running = False
+        if action_value.get("guiding", False):
+            self.stop_guider(row["device_name"])
 
         # stop telescope tracking at end of sequence
         if "Telescope" in paired_devices:
@@ -3248,6 +3250,44 @@ class Observatory:
         )
 
         return True
+
+    def stop_guider(self, device_name: str) -> bool:
+        """
+        Stop the autoguiding system for a specific telescope.
+
+        This function finds the correct guider thread using the telescope's
+        device name, sets its running flag to False, and then waits for the
+        thread to terminate.
+
+        Parameters:
+            device_name (str): The device name of the telescope whose guider
+                            should be stopped.
+
+        Returns:
+            bool: True if the guider was stopped successfully, False otherwise.
+        """
+
+        # Find the guider thread in the list of running threads
+        for i, thread_info in enumerate(self.threads):
+            if (
+                thread_info["type"] == "guider"
+                and thread_info["device_name"] == device_name
+            ):
+                # Get the guider instance and set its running flag to False
+                guider_instance = self.guider[device_name]
+
+                if guider_instance.running:
+                    self.logger.info(f"Stopping guiding for {device_name}")
+                    guider_instance.running = False
+
+                    # Wait for the thread to finish
+                    thread_info["thread"].join()
+
+                    # Remove the thread from the list
+                    self.logger.info(f"Guiding for {device_name} stopped successfully.")
+                    return True
+
+        return False
 
     def guiding_calibration_sequence(self, row, paired_devices: PairedDevices) -> bool:
         """
