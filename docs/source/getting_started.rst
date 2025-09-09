@@ -36,7 +36,7 @@ During the initial run, you will be prompted to configure your observatory.
  
      /Users/peter/Documents/Astra/observatory_config
  
-   * The configuration files will be created in the `observatory_config` directory. You must edit them with your observatory's  information before using Astra in normal operation. See: :doc:`observatory configuration files <user_guide/configuration>`.
+   ..  attention:: The configuration files will be created in the `observatory_config` directory. You must edit them with your observatory's  information before using Astra in normal operation. See: :doc:`observatory configuration files <user_guide/observatory_configuration>`.
 
 
 Normal operation
@@ -56,7 +56,9 @@ Once the initial setup is complete, you can run Astra.
 
 #. After a few moments, open your web browser and navigate to the following URL http://localhost:8000
 
-   .. image:: ../../screenshot.png
-      :width: 800px
-      :align: center
-      :alt: Astra web interface
+.. figure:: _static/screenshot.jpg
+   :width: 80%
+   :align: center
+   :alt: Astra web interface
+
+   Astra web interface

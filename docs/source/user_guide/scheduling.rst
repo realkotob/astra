@@ -1,148 +1,270 @@
-Scheduling
-==========
+Scheduling Syntax
+================
 
-Astra uses a scheduling system to automate observatory operations. The schedule is defined as a CSV file that specifies what actions to perform and when to perform them.
+Astra uses a flexible scheduling system to automate observatory operations. Schedules are defined using JSONL files (JSON Lines format), where each line represents a scheduled action with these fields:
 
-Schedule Format
--------------
-
-The schedule file is a CSV file with the following columns:
-
-- ``device_type``: Type of device to perform the action (e.g., "Camera")
-- ``device_name``: Name of the specific device (must match a device_name in the configuration)
+.. - ``device_type``: Type of the device (e.g., camera, telescope)
+- ``device_name``: Name of the camera device (the primary instrument that coordinates all operations)
 - ``action_type``: Type of action to perform
-- ``action_value``: Parameters for the action (in Python dictionary format)
-- ``start_time``: When the action should start (ISO format: YYYY-MM-DDThh:mm:ss)
-- ``end_time``: When the action should end (ISO format: YYYY-MM-DDThh:mm:ss)
+- ``action_value``: Parameters for the action
+- ``start_time``: When the action should start (UTC ISO format: YYYY-MM-DD HH:MM:SS.sss)
+- ``end_time``: Latest when the action should end (UTC ISO format: YYYY-MM-DD HH:MM:SS.sss)
 
-Supported Action Types
---------------------
-
-Astra supports the following action types:
-
-- ``open``: Open the observatory (dome, unpark telescope)
-- ``close``: Close the observatory (park telescope, close dome)
-- ``cool_camera``: Turn on camera cooling and set target temperature
-- ``object``: Take science images of a target object
-- ``calibration``: Take calibration frames (darks or bias)
-- ``flats``: Take flat field calibration frames
-- ``autofocus``: Perform autofocus operation
-- ``calibrate_guiding``: Calibrate the autoguiding system
-- ``pointing_model``: Build or refine a pointing model
-- ``complete_headers``: Finalize FITS headers with additional metadata
-
-Action Parameters
----------------
-
-Each action type requires specific parameters in the ``action_value`` field:
-
-Object Imaging
-~~~~~~~~~~~~
-
-Parameters for ``object`` action type:
-
-.. code-block:: python
-
-    {
-        'object': 'M51',                # Target name
-        'ra': 202.48,                   # Right Ascension in degrees
-        'dec': 47.195,                  # Declination in degrees
-        'exptime': 120,                 # Exposure time in seconds
-        'n': 10,                        # Number of exposures
-        'filter': 'R',                  # Filter name
-        'guiding': True,                # Enable autoguiding
-        'pointing': True,               # Enable pointing correction
-        'bin': 1                        # Binning factor (optional)
-    }
-
-Calibration Frames
-~~~~~~~~~~~~~~~~
-
-Parameters for ``calibration`` action type:
-
-.. code-block:: python
-
-    {
-        'exptime': [0, 10, 30],         # List of exposure times
-        'n': [10, 5, 5]                 # List of number of exposures for each time
-    }
-
-Flat Fields
-~~~~~~~~~~
-
-Parameters for ``flats`` action type:
-
-.. code-block:: python
-
-    {
-        'filter': ['R', 'G', 'B'],      # List of filters
-        'n': [10, 10, 10]               # Number of flats per filter
-    }
-
-Autofocus
-~~~~~~~~
-
-Parameters for ``autofocus`` action type:
-
-.. code-block:: python
-
-    {
-        'exptime': 3,                   # Exposure time for focus frames
-        'filter': 'R'                   # Filter to use for focusing
-    }
-
-Opening and Closing
-~~~~~~~~~~~~~~~~~
-
-The ``open`` and ``close`` action types typically use an empty dictionary:
-
-.. code-block:: python
-
-    {}
-
-Typical Schedule Structure
-------------------------
-
-A typical night's schedule might follow this pattern:
-
-1. Open observatory
-2. Cool camera
-3. Take evening flat fields
-4. Perform autofocus
-5. Observe scientific targets
-6. Take calibration frames
-7. Complete headers
-8. Close observatory
+.. note::
+   **Instrument-Centric Design**: All scheduled actions specify a camera as the ``device_name``. The camera acts as the primary instrument that coordinates operations with its paired devices (telescope, dome, filter wheel, focuser, etc.). This design ensures all devices work together as a cohesive system.
 
 Example Schedule
---------------
-
-Here's a example of a complete schedule for a night's observation:
-
-.. code-block:: text
-
-    device_type,device_name,action_type,action_value,start_time,end_time
-    Camera,Main Camera,open,"{}",2025-04-14T19:00:00,2025-04-14T19:05:00
-    Camera,Main Camera,cool_camera,"{}",2025-04-14T19:05:00,2025-04-14T19:30:00
-    Camera,Main Camera,flats,"{'filter': ['R', 'G', 'B'], 'n': [5, 5, 5]}",2025-04-14T19:30:00,2025-04-14T20:00:00
-    Camera,Main Camera,autofocus,"{'exptime': 3, 'filter': 'R'}",2025-04-14T20:05:00,2025-04-14T20:20:00
-    Camera,Main Camera,object,"{'object': 'M51', 'ra': 202.48, 'dec': 47.195, 'exptime': 120, 'n': 10, 'filter': 'R', 'guiding': true, 'pointing': true}",2025-04-14T20:30:00,2025-04-14T22:30:00
-    Camera,Main Camera,object,"{'object': 'M101', 'ra': 210.80, 'dec': 54.35, 'exptime': 180, 'n': 8, 'filter': 'R', 'guiding': true, 'pointing': true}",2025-04-14T22:30:00,2025-04-15T00:30:00
-    Camera,Main Camera,calibration,"{'exptime': [0, 120, 180], 'n': [10, 3, 3]}",2025-04-15T00:30:00,2025-04-15T01:30:00
-    Camera,Main Camera,complete_headers,"{}",2025-04-15T01:30:00,2025-04-15T01:35:00
-    Camera,Main Camera,close,"{}",2025-04-15T01:35:00,2025-04-15T01:40:00
-
-Weather Conditions
 ----------------
+.. code-block:: json
 
-Astra continuously monitors weather conditions using the SafetyMonitor device. Weather-sensitive actions (like opening the observatory or taking object frames) will only execute if weather conditions are safe. Calibration frames and other non-weather-dependent actions will still run in unsafe weather.
+    {"device_name":"camera_main","action_type":"open","action_value":{},"start_time":"2025-08-23 22:38:25.210","end_time":"2025-08-24 10:49:15.363"}
+    {"device_name":"camera_main","action_type":"flats","action_value":{"filter":["J", "H"],"n":[50, 50]},"start_time":"2025-08-23 22:39:25.210","end_time":"2025-08-23 23:16:00.018"}
+    {"device_name":"camera_main","action_type":"object","action_value":{"object":"Sp2151-4017","filter":"J","ra":327.88132,"dec":-40.28976,"exptime":8,"guiding":true,"pointing":false},"start_time":"2025-08-23 23:17:00.018","end_time":"2025-08-24 04:43:40.018"}
+    {"device_name":"camera_main","action_type":"object","action_value":{"object":"Sp2343-2906","filter":"H","ra":355.88360,"dec":-29.10759,"exptime":38,"guiding":true,"pointing":false},"start_time":"2025-08-24 04:46:40.018","end_time":"2025-08-24 10:23:40.018"}
+    {"device_name":"camera_main","action_type":"flats","action_value":{"filter":["H", "J"],"n":[50, 50]},"start_time":"2025-08-24 10:24:40.018","end_time":"2025-08-24 10:49:15.363"}
+    {"device_name":"camera_main","action_type":"close","action_value":{},"start_time":"2025-08-24 10:49:15.363","end_time":"2025-08-24 11:49:15.363"}
+    {"device_name":"camera_main","action_type":"calibration","action_value":{"exptime":[0,10,15,30,38,60,120],"n":[10,10,10,10,10,10,10],"filter":"Dark"},"start_time":"2025-08-24 10:55:15.363","end_time":"2025-08-24 11:49:15.363"}
 
-Schedule Control
----------------------
+.. note::
+    Astra's JSONL files support comments using lines that start with ``//``:
 
-The schedule is loaded automatically when Astra starts. Currently, schedule control is handled through the Astra interface and not through command-line arguments. The schedule automatically runs according to the times specified.
 
 Schedule File Location
 -------------------
 
-The schedule file should be located in the ``schedule`` directory and named after the observatory (e.g., ``schedule/my_observatory.csv``). Astra will automatically detect and load this file when it starts.
+Place your schedule file in the observatory schedules directory with a ``.jsonl`` extension. For example:
+
+- ``~/Documents/Astra/schedules/observatory_name.jsonl``
+
+Astra will automatically detect and load the JSONL schedule file, with the specified name pattern, if modified.
+
+Supported Action Types
+--------------------
+
+Astra supports the following action types for observatory automation, organized by function:
+
+- ``open``: Open observatory
+- ``close``: Close observatory
+- ``cool_camera``: Activate camera cooling
+- ``object``: Capture light frames with optional pointing correction/autoguiding
+- ``calibration``: Capture dark and bias frames
+- ``flats``: Capture sky flat field frames
+- ``autofocus``: Autofocus
+- ``calibrate_guiding``: Calibrate guiding parameters
+- ``pointing_model``: Help build a telescope pointing model
+- ``complete_headers``: Complete FITS headers of all images captured
+
+.. note::
+   The ``complete_headers`` action automatically runs at the end of every schedule execution to ensure complete metadata in all FITS files.
+
+
+Action Value Parameters
+-----------------------
+
+Each action type requires specific parameters in the ``action_value`` field. All parameters are specified as JSON objects.
+
+``open``
+^^^^^^^^
+
+Open the observatory for observations:
+
+1. Opens dome shutter
+2. Unparks telescope
+
+**Required parameters:**
+    None
+
+**Optional parameters:**
+    None
+
+
+``close``
+^^^^^^^^
+
+Close the observatory:
+
+1. Stop any active guiding operations
+2. Stop telescope slewing and tracking
+3. Park the telescope
+4. Park the dome and close shutter
+
+
+**Required parameters:**
+    None
+
+**Optional parameters:**
+    None
+
+``object``
+^^^^^^^^^^
+
+Capture a sequence of light frames:
+
+1. Pre-sequence setup (telescope pointing, setting filters, focus position, camera binning, base headers)
+2. Capture exposures
+3. Perform pointing correction (if `pointing=true`)
+4. Start guiding (if `guiding=true`)
+5. Stop exposures, guiding, and telescope tracking at completion
+
+**Required parameters:**
+    - ``object``: Target name (string)
+    - ``exptime``: Exposure time in seconds (float)
+
+**Optional parameters:**
+    - ``ra``: Right Ascension in degrees (float, default: current RA)
+    - ``dec``: Declination in degrees (float, default: current Dec)
+    - ``filter``: Filter name (string, default: current filter)
+    - ``focus_shift``: Focus shift value from best focus position (float, default: None)
+    - ``focus_position``: Absolute focus position value (float, default: best focus position)
+    - ``n``: Number of exposures (int, default: inf)
+    - ``guiding``: Enable autoguiding with `Donuts <https://donuts.readthedocs.io/en/latest/>`_ (boolean, default: false)
+    - ``pointing``: Enable pointing correction with `twirl <https://twirl.readthedocs.io/en/latest/>`_ (boolean, default: false)
+    - ``bin``: Binning factor (int, default: 1)
+    - ``dir``: Absolute directory path for saving images (string, default: auto-generated as ~/Documents/Astra/images/YYYYMMDD where YYYYMMDD is the local night's date calculated from schedule's UTC start time plus site longitude offset in hours)
+
+
+``calibration``
+^^^^^^^^^^^^^^^
+
+Capture a sequence of calibration images.
+
+**Required parameters:**
+    - ``exptime``: List of exposure times in seconds (List[float])
+    - ``n``: List of number of exposures for each exposure time (List[int])
+
+**Optional parameters:**
+    - ``filter``: Filter specification (string, default: current filter)
+    - ``dir``: Same as for ``object`` action type
+    - ``bin``: Binning factor (int, default: 1)
+
+
+
+``flats``
+^^^^^^^^^
+
+Capture a sequence of sky flat field frames:
+
+1. Waits for the Sun's altitude to be between -1 and -12 degrees
+2. Positions telescope to `near-uniform portion of the sky <https://arxiv.org/pdf/1407.8283.pdf>`_, 180 degrees opposite the Sun in azimuth, 75 degrees above the horizon in altitude
+3. Capture exposures and re-positions telescope between exposures
+4. Iterates through filters
+5. Handles exposure time adjustments as sky brightness changes
+
+**Required parameters:**
+    - ``filter``: List of filter names (List[string])
+    - ``n``: Number of flats per filter (List[int])
+
+**Optional parameters:**
+    - ``dir``: Same as for ``object`` action type
+    - ``bin``: Binning factor (int, default: 1)
+
+**Configuration-based parameters:**
+    The sky flat field sequence automatically uses camera-specific settings from the observatory configuration to calculate optimal exposure times based on sky brightness and target ADU levels.
+
+``autofocus``
+^^^^^^^^^^^^^
+
+Perform autofocus sequence to achieve optimal telescope focus:
+
+1. If no RA/DEC specified, use the local star database to identify a suitable field with enough stars
+2. Move telescope
+3. Takes images at different focus positions
+4. Measures star sharpness in each image
+5. Fits a curve to determine optimal focus
+6. Generates plots and saves focus results
+
+**Required parameters:**
+    None
+
+**Optional parameters:**
+    - ``exptime``: Exposure time for focus frames in seconds (int/float, default: 3.0)
+    - ``reduce_exposure_time``: Reduce exposure time if necessary to prevent saturation (boolean, default: false)
+    - ``search_range``: Range of focus positions to search for the best focus (float, default: None)
+    - ``search_range_is_relative``: Whether the search range is relative to the current focus position (boolean, default: false)
+    - ``n_steps``: Number of steps for each sweep (Tuple(int,int), default: (30, 20))
+    - ``n_exposures``: Number of exposures at each focus position or an array specifying exposures for each sweep (Tuple(int,int) or List[int], default: (1, 1))
+    - ``decrease_search_range``: Whether to decrease the search range after each sweep (boolean, default: true)
+    - ``ra``: Right Ascension of the target (float, default: from field selection)
+    - ``dec``: Declination of the target (float, default: from field selection)
+    - ``star_find_threshold``: DAOStarFinder threshold for star detection (float, default: 5.0)
+    - ``fwhm``: DAOStarFinder full-width half-maximum (FWHM) of the major axis of the Gaussian kernel in units of pixels (float, default: 8.0)
+    - ``maximal_zenith_angle``: Maximum allowed zenith angle for best autofocusing field (float, default: None)
+    - ``airmass_threshold``: Maximum allowed airmass for best autofocusing field (float, default: 1.01)
+    - ``percent_to_cut``: Percentage of worst-performing focus positions to exclude when updating the search range (float, default: 60)
+    - ``filter``: Filter to use for focusing (string, default: current filter)
+    - ``observation_time``: Observation time specified using astropy's Time (astropy.Time, default: now)
+    - ``maximal_number_of_stars``: Maximum number of stars to be considered in the NeighbourhoodQuery query (int, default: 100000)
+    - ``g_mag_range``: Range of G-band magnitudes for star selection (Tuple[float, float], default: (0, 10))
+    - ``j_mag_range``: Range of J-band magnitudes for star selection (Tuple[float, float], default: (0, 10))
+    - ``fov_height``: Height of the field of view (FOV) in degrees (int, default: 0.2)
+    - ``fov_width``: Width of the field of view (FOV) in degrees (int, default: 0.2)
+    - ``selection_method``: Method for selecting stars for focus measurement ("single", "maximal", "any") (string, default: "single")
+    - ``focus_measure_operator``: Operator for focus measurement ("HFR", "2dgauss", "normavar") (string, default: "HFR")
+    - ``extremum_estimator``: Curve fitting method for determining optimal focus ("LOWESS", "medianfilter", "spline", "rbf") (string, default: "LOWESS")
+    - ``save``: Updates the observatory configuration with the optimal focus position found during autofocus operation for future use. (boolean, default: true)
+    - ``bin``: Binning factor (int, default: 1)
+
+
+``calibrate_guiding``
+^^^^^^^^^^^^^^^^^^^^
+
+Calibrate guiding parameters by measuring pixel-to-time scales of pulse guiding commands and determining camera orientation relative to telescope mount axes.
+
+**Required parameters:**
+    None
+
+**Optional parameters:**
+    - ``filter``: Filter name (string, default: current filter)
+    - ``pulse_time``: Duration of guide pulses in milliseconds (float, default: 5000)
+    - ``exptime``: Exposure time for calibration images (float, default: 5)
+    - ``settle_time``: Wait time after pulses before exposing (float, default: 10)
+    - ``number_of_cycles``: Number of calibration cycles to perform (int, default: 10)
+    - ``focus_shift``: Focus shift value from best focus position (float, default: None)
+    - ``focus_position``: Absolute focus position value (float, default: best focus position)
+    - ``bin``: Binning factor (int, default: 1)
+
+``pointing_model``
+^^^^^^^^^^^^^^^^^^
+
+Generate a series of pointings and capture an image at each
+location, plate solve, and send SyncToCoordinates to the telescope. The sequence creates
+a spiral pattern of points from zenith down to a 30 degree altitude, avoiding
+positions less than 20 degrees to the Moon.
+
+**Required parameters:**
+    None
+
+**Optional parameters:**
+    - ``n``: Number of points to use for the model (int, default: 100)
+    - ``exptime``: Exposure time for the model (float, default: 1)
+    - ``dark_subtraction``: Apply dark subtraction (requires previously executed calibration sequence of matching dark frames) (boolean, default: false)
+    - ``filter``: Filter name (string, default: current filter)
+    - ``focus_shift``: Focus shift value from best focus position (float, default: None)
+    - ``focus_position``: Absolute focus position value (float, default: best focus position)
+    - ``bin``: Binning factor (int, default: 1)
+
+``complete_headers``
+^^^^^^^^^^^^^^^^^^^^
+
+Post-processes captured images by adding dynamic FITS header information that
+wasn't available at exposure time. Uses polled device data from paired devices to interpolate
+accurate values for each image timestamp.
+
+**Required parameters:**
+    None
+
+**Optional parameters:**
+    None
+
+
+``cool_camera``
+^^^^^^^^^^^^^^^
+
+Activates the camera cooler and sets the target temperature with specified tolerance 
+from observatory configuration with a 30 minute timeout.
+
+**Required parameters:**
+    None
+
+**Optional parameters:**
+    None
