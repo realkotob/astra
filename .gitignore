@@ -1,6 +1,7 @@
 temp
 assets
 astra_config.yml
+.vscode/
 
 # images
 *.fits
