@@ -395,14 +395,13 @@ def check_astelos_error(
         ["ERR_RunDevError", "Working pressure suddenly lost", "2", "HA"],
         ["ERR_RunDevError", "Working pressure suddenly lost", "2", "DEC"],
         ["ERR_DeviceWarn", "Malformed telegram from GPS", "4", "LOCAL"],
+        ["ERR_DeviceError", "axis (1)\\| BOTH LIMITS (code=128)", "2", "DOME[0]"],
+        ["ERR_DeviceError", "axis (1)\\| BOTH LIMITS (code=128)", "2", "DOME[1]"],
+        ["ERR_DeviceError", "axis (1)\\| EXTERN (code=32)", "2", "DOME[0]"],
+        ["ERR_DeviceError", "axis (1)\\| EXTERN (code=32)", "2", "DOME[1]"],
     ]
     if close:
-        slit_error = [
-            ["ERR_DeviceError", "axis (1)\\| BOTH LIMITS (code=128)", "2", "DOME[0]"],
-            ["ERR_DeviceError", "axis (1)\\| BOTH LIMITS (code=128)", "2", "DOME[1]"],
-            ["ERR_DeviceError", "axis (1)\\| EXTERN (code=32)", "2", "DOME[0]"],
-            ["ERR_DeviceError", "axis (1)\\| EXTERN (code=32)", "2", "DOME[1]"],
-        ]
+        slit_error = []
         allowed_err.extend(slit_error)
 
     df_allowed = pd.DataFrame(
