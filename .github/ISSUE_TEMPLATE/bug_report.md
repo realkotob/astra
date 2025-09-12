@@ -12,16 +12,13 @@ assignees: ''
 **Description**  
 _A clear and concise description of the bug._
 
+**Suggested Fix**
+_A possible route to fix the problem_
+
 **Steps to Reproduce**  
 1.  
 2.  
 3.  
-
-**Expected Behavior**  
-_What you expected to happen._
-
-**Actual Behavior**  
-_What actually happened._
 
 **Environment**  
 - OS:  
