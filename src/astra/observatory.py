@@ -3019,16 +3019,18 @@ class Observatory:
 
                 # update action value
                 action_value = action.action_value
-                # create a dict copy to avoid modifying the original action_value
+                # create a config copy to avoid modifying the original action_value
                 # and to avoid issues with filter in setup_observatory
-                action_value_dict = {
-                    key: action_value[key] for key in action_value if key != "filter"
-                }
-                action_value_dict["ra"] = target_radec.ra.deg  # type: ignore
-                action_value_dict["dec"] = target_radec.dec.deg  # type: ignore
+                action_value_config = BaseActionConfig()
+                for key in action_value:
+                    if key != "filter":
+                        setattr(action_value_config, key, action_value[key])
+
+                action_value_config.ra = target_radec.ra.deg  # type: ignore
+                action_value_config.dec = target_radec.dec.deg  # type: ignore
 
                 # move telescope to target
-                self.setup_observatory(paired_devices, action_value_dict)
+                self.setup_observatory(paired_devices, action_value_config)
 
     def flats_exptime(
         self,

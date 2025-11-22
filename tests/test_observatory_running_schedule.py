@@ -113,9 +113,9 @@ def create_schedule_data(
             "duration": 2,  # Give it a bit more time
         },
         "flats": {
-            "action_value": {"filter": ["Clear"], "n": [1]},
+            "action_value": {"filter": ["Clear"], "n": [5]},
             "duration": 2,
-        },  # Just 1 flat, shorter duration
+        },
     }
 
     if action_type not in action_configs:
@@ -437,43 +437,6 @@ def prepare_flats(server_url, sunset=True):
     if r.status_code != 200:
         assert False, "Failed to set observatory longitude."
 
-    def test_flats_action(self, observatory, schedule_manager, server_url, temp_config):
-        """Test flats action type"""
-        set_safety_monitor_safe(server_url)
-        schedule_data = create_schedule_data("flats")
-
-        with schedule_manager(schedule_data):
-            success, completed, error_free_maintained = wait_for_schedule_completion(
-                observatory, schedule_data, server_url, temp_config
-            )
-
-            assert error_free_maintained, (
-                f"error_free became False during flats action. Error sources: {observatory.error_source}"
-            )
-            assert success, (
-                f"flats action did not complete successfully. Error sources: {observatory.error_source}"
-            )
-            assert completed > 0, "No actions were completed"
-
-    def test_flats_action_with_weather_alert(
-        self, observatory, schedule_manager, server_url, temp_config
-    ):
-        """Test flats action type with weather alert"""
-        schedule_data = create_schedule_data("flats", inject_weather_alert=True)
-
-        with schedule_manager(schedule_data):
-            success, completed, error_free_maintained = wait_for_schedule_completion(
-                observatory, schedule_data, server_url, temp_config
-            )
-
-            assert error_free_maintained, (
-                f"error_free became False during flats action. Error sources: {observatory.error_source}"
-            )
-            assert success, (
-                f"flats action did not complete successfully. Error sources: {observatory.error_source}"
-            )
-            assert completed > 0, "No actions were completed"
-
 
 @pytest.mark.slow
 class TestScheduleActionTypes:
@@ -697,6 +660,45 @@ class TestScheduleActionTypes:
             assert success, (
                 f"autofocus action did not complete successfully. Error sources: "
                 f"{observatory.logger.error_source}"
+            )
+            assert completed > 0, "No actions were completed"
+
+    def test_flats_action(self, observatory, schedule_manager, server_url, temp_config):
+        """Test flats action type"""
+        set_safety_monitor_safe(server_url)
+        schedule_data = create_schedule_data("flats", temp_config)
+
+        with schedule_manager(schedule_data):
+            success, completed, error_free_maintained = wait_for_schedule_completion(
+                observatory, schedule_data, server_url, temp_config
+            )
+
+            assert error_free_maintained, (
+                f"error_free became False during flats action. Error sources: {observatory.error_source}"
+            )
+            assert success, (
+                f"flats action did not complete successfully. Error sources: {observatory.error_source}"
+            )
+            assert completed > 0, "No actions were completed"
+
+    def test_flats_action_with_weather_alert(
+        self, observatory, schedule_manager, server_url, temp_config
+    ):
+        """Test flats action type with weather alert"""
+        schedule_data = create_schedule_data(
+            "flats", temp_config, inject_weather_alert=True
+        )
+
+        with schedule_manager(schedule_data):
+            success, completed, error_free_maintained = wait_for_schedule_completion(
+                observatory, schedule_data, server_url, temp_config
+            )
+
+            assert error_free_maintained, (
+                f"error_free became False during flats action. Error sources: {observatory.error_source}"
+            )
+            assert success, (
+                f"flats action did not complete successfully. Error sources: {observatory.error_source}"
             )
             assert completed > 0, "No actions were completed"
 
