@@ -31,7 +31,7 @@ let skyChart = null;
 let skyData = null;
 let telescopes = [];
 let updateInterval = null;
-let skyChartMousePos = { x: null, y: null };
+let skyChartMousePos = { x: null, y: null, type: 'mouse' };
 
 /**
  * Convert RA/Dec (J2000) to Alt/Az for current time and location
@@ -400,7 +400,7 @@ function plotSkyProjection() {
         if (newSvg) {
             const pointermove = new PointerEvent("pointermove", {
                 bubbles: true,
-                pointerType: "mouse",
+                pointerType: skyChartMousePos.type || "mouse",
                 clientX: skyChartMousePos.x,
                 clientY: skyChartMousePos.y,
             });
@@ -463,24 +463,15 @@ function initializeSkyChart() {
     // Add event listeners to container for persistent hover
     const container = document.getElementById('sky-chart');
     if (container) {
-        container.addEventListener("pointermove", (event) => {
-            skyChartMousePos = { x: event.clientX, y: event.clientY };
-        });
+        const updateMousePos = (event) => {
+            skyChartMousePos = { x: event.clientX, y: event.clientY, type: event.pointerType };
+        };
 
-        container.addEventListener("touchend", (event) => {
-            const svg = container.querySelector('svg');
-            if (svg) {
-                const pointerleave = new PointerEvent("pointerleave", {
-                    bubbles: true,
-                    pointerType: "mouse",
-                });
-                svg.dispatchEvent(pointerleave);
-            }
-            skyChartMousePos = { x: null, y: null };
-        });
+        container.addEventListener("pointermove", updateMousePos);
+        container.addEventListener("pointerdown", updateMousePos);
 
         container.addEventListener("pointerleave", () => {
-            skyChartMousePos = { x: null, y: null };
+            skyChartMousePos = { x: null, y: null, type: null };
         });
     }
 }
