@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from alpaca.telescope import AlignmentModes, GuideDirections, PierSide
 from astropy.io import fits
+from astropy.stats import sigma_clipped_stats
 from donuts import Donuts
 from donuts.image import Image
 
@@ -249,15 +250,21 @@ class CustomImageClass(Image):
         Performs background subtraction, noise reduction, and systematic
         correction to improve star detection reliability.
         """
+
         # if greater than 1Kx1K, crop to 1Kx1K for speed
         shapex, shapey = self.raw_image.shape
-        if shapex > 1000 and shapey > 1000:
+        if shapex > 2048 and shapey > 2048:
             self.raw_image = self.raw_image[
-                shapex // 2 - 500 : shapex // 2 + 500,
-                shapey // 2 - 500 : shapey // 2 + 500,
+                shapex // 2 - 1024 : shapex // 2 + 1024,
+                shapey // 2 - 1024 : shapey // 2 + 1024,
             ]
 
         self.raw_image = clean_image(self.raw_image)
+        mean, median, std = sigma_clipped_stats(self.raw_image, sigma=3.0)
+
+        # remove noise floor
+        self.raw_image -= median + 5 * std
+        self.raw_image[self.raw_image < 0] = 1
 
 
 class Guider:
