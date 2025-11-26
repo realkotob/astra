@@ -2959,6 +2959,17 @@ class Observatory:
             del self._image_handlers[camera_name]
             self.logger.debug(f"Cleaned up image handler for camera '{camera_name}'")
 
+        # stop telescope tracking at end of sequence
+        if "Telescope" in paired_devices:
+            self.execute_and_monitor_device_task(
+                "Telescope",
+                "Tracking",
+                False,
+                "Tracking",
+                device_name=paired_devices["Telescope"],
+                log_message=f"Stopping telescope {paired_devices['Telescope']} tracking",
+            )
+
     def flats_position(
         self, obs_location: EarthLocation, paired_devices: dict, action: Action
     ) -> None:
