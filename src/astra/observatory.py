@@ -1160,6 +1160,7 @@ class Observatory:
             ),
         )
 
+        self.schedule_manager.running = False
         self.logger.info(
             "Schedule stopped. "
             f"{self.schedule_manager.get_completed_percentage()}% of actions completed."
