@@ -122,7 +122,7 @@ Weather monitoring and safety parameters:
 
 **Supported Parameters:**
 
-- Standard ASCOM: ``Humidity``, ``Temperature``, ``WindSpeed``, ``SkyTemperature``, ``SkyBrightness``
+- Standard ASCOM: ``CloudCover``, ``DewPoint``, ``Humidity``, ``Pressure``, ``RainRate``, ``SkyBrightness``, ``SkyQuality``, ``SkyTemperature``, ``StarFWHM``, ``Temperature``, ``WindDirection``, ``WindGust``, ``WindSpeed``
 - Custom: ``RelativeSkyTemp`` (sky temperature minus ambient temperature, requires both ``SkyTemperature`` and ``Temperature``)
 
 
