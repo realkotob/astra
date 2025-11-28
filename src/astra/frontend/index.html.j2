@@ -923,10 +923,10 @@
                         .filter(item => item.item === 'Telescope')
                         .map(item => ({
                             name: item.name,
-                            alt: item.polled?.Altitude?.value || 0,
-                            az: item.polled?.Azimuth?.value || 0,
-                            ra: item.polled?.RightAscension?.value || 0, // Convert hours to degrees
-                            dec: item.polled?.Declination?.value || 0,
+                            alt: parseFloat(Number(item.polled?.Altitude?.value || 0).toFixed(1)),
+                            az: parseFloat(Number(item.polled?.Azimuth?.value || 0).toFixed(1)),
+                            ra: parseFloat(Number(item.polled?.RightAscension?.value || 0).toFixed(1)), // Convert hours to degrees
+                            dec: parseFloat(Number(item.polled?.Declination?.value || 0).toFixed(1)),
                             tracking: item.polled?.Tracking?.value || false
                         }))
                         .filter(tel => tel.alt !== 0 || tel.az !== 0); // Filter out invalid positions
