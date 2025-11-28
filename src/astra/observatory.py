@@ -2227,12 +2227,6 @@ class Observatory:
                 log_message=f"Stopping telescope {paired_devices['Telescope']} tracking",
             )
 
-        # Clean up the image handler for this camera
-        camera_name = camera.device_name
-        if camera_name in self._image_handlers:
-            del self._image_handlers[camera_name]
-            self.logger.debug(f"Cleaned up image handler for camera '{camera_name}'")
-
     def pointing_model_sequence(
         self, action: Action, paired_devices: PairedDevices
     ) -> None:
@@ -2420,12 +2414,6 @@ class Observatory:
             wcs_solve = None
 
             counter += 1
-
-        # Clean up the image handler for this camera
-        camera_name = camera.device_name
-        if camera_name in self._image_handlers:
-            del self._image_handlers[camera_name]
-            self.logger.debug(f"Cleaned up image handler for camera '{camera_name}'")
 
     def pointing_correction(
         self,
@@ -2646,14 +2634,6 @@ class Observatory:
                 message=f"Error running guiding calibration for {action.device_name}",
                 exception=e,
             )
-        finally:
-            # Clean up the image handler for this camera
-            camera_name = action.device_name
-            if camera_name in self._image_handlers:
-                del self._image_handlers[camera_name]
-                self.logger.debug(
-                    f"Cleaned up image handler for camera '{camera_name}'"
-                )
 
         return success
 
@@ -2726,14 +2706,6 @@ class Observatory:
                 message=f"Error running autofocus for {action.device_name}",
                 exception=e,
             )
-        finally:
-            # Clean up the image handler for this camera
-            camera_name = action.device_name
-            if camera_name in self._image_handlers:
-                del self._image_handlers[camera_name]
-                self.logger.debug(
-                    f"Cleaned up image handler for camera '{camera_name}'"
-                )
 
         return success
 
@@ -2953,12 +2925,6 @@ class Observatory:
 
                 self.logger.info("Moving on...")
                 break
-
-        # Clean up the image handler for this camera
-        camera_name = camera.device_name
-        if camera_name in self._image_handlers:
-            del self._image_handlers[camera_name]
-            self.logger.debug(f"Cleaned up image handler for camera '{camera_name}'")
 
         # stop telescope tracking at end of sequence
         if "Telescope" in paired_devices:
