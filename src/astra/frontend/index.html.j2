@@ -1018,12 +1018,14 @@
                 // update last image
                 let lastImageDiv = document.getElementById("summary-last-image-parent");
                 let lastImage = message['last_image'];
-                if (lastImage['url'] != null) {
+                if (lastImage && lastImage['available']) {
                     document.getElementById("summary-last-image").classList.remove('hidden');
                     document.getElementById("summary-last-image-placeholder").classList.add('hidden');
-                    document.getElementById("summary-last-image").src = lastImage['url'];
-                    document.getElementById("summary-last-image-text").innerHTML = syntaxHighlight(lastImage['useful_headers']);
-                    lastImageDiv.href = lastImage['url'];
+                    // Use the new preview endpoint with cache-busting timestamp
+                    let imageUrl = '/api/latest_image_preview?' + (lastImage['timestamp'] || Date.now());
+                    document.getElementById("summary-last-image").src = imageUrl;
+                    document.getElementById("summary-last-image-text").innerHTML = syntaxHighlight(lastImage['headers']);
+                    lastImageDiv.href = imageUrl;
 
                 } else {
                     document.getElementById("summary-last-image").classList.add('hidden');

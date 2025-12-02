@@ -18,17 +18,14 @@ import asyncio
 import datetime
 import json
 import logging
-import os
 import sqlite3
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC
-from glob import glob
 from io import BytesIO
 from pathlib import Path
 
 import httpx
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import uvicorn
@@ -43,6 +40,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from fastapi.templating import Jinja2Templates
+from PIL import Image
 
 from astra import ASTRA_VER, Config
 from astra.image_handler import HeaderManager
@@ -68,8 +66,8 @@ FWS = {}
 DEBUG = False
 FRONTEND = Jinja2Templates(directory=FRONTEND_PATH)
 LAST_IMAGE = None
-LAST_IMAGE_JPG = None
-USEFUL_HEADERS = None
+LAST_IMAGE_PREVIEW = None  # Stores (jpeg_bytes, headers) tuple
+LAST_IMAGE_TIME = None
 TRUNCATE_FACTOR = None
 CUSTOM_OBSERVATORY = None
 SERVER_URL = None
@@ -180,46 +178,53 @@ def format_time(ftime: datetime.datetime) -> str | None:
         return None
 
 
-def convert_fits_to_jpg(fits_file: str) -> tuple[str, dict]:
-    """Convert FITS astronomical image to JPEG for web display.
+def convert_fits_to_preview(fits_file: str) -> tuple[bytes, dict]:
+    """Convert FITS astronomical image to JPEG bytes for web display.
 
     Opens FITS file, extracts image data and headers, applies Z-scale
-    normalization, and saves as JPEG. Removes old JPEG files for the
-    observatory before creating new one.
+    normalization, and returns JPEG as bytes (no disk I/O).
 
     Args:
         fits_file (str): Path to FITS file to convert.
-        observatory (str): Observatory name for file management.
 
     Returns:
-        tuple[str, dict]: Filepath (relative path to JPEG) and headers
-            (extracted FITS header information).
+        tuple[bytes, dict]: JPEG image bytes and extracted FITS headers.
     """
-    # Open the FITS file
     headers = {}
     with fits.open(fits_file) as hdulist:
-        # Get the image data from the primary HDU
         image_data = hdulist[0].data  # type: ignore
+
+        # Bin image data if larger than limit
+        h, w = image_data.shape
+        limit = 1024
+        if h > limit or w > limit:
+            bin_factor = max(int(np.ceil(h / limit)), int(np.ceil(w / limit)))
+            new_h = (h // bin_factor) * bin_factor
+            new_w = (w // bin_factor) * bin_factor
+            data_trimmed = image_data[:new_h, :new_w]
+            image_data = data_trimmed.reshape(
+                new_h // bin_factor, bin_factor, new_w // bin_factor, bin_factor
+            ).mean(axis=(1, 3))
+
         for key in ["EXPTIME", "DATE-OBS", "FILTER", "IMAGETYP"]:
             headers[key] = hdulist[0].header[key]  # type: ignore
         if headers["IMAGETYP"] == "Light":
             headers["OBJECT"] = hdulist[0].header["OBJECT"]  # type: ignore
 
-    # Normalize the image data to the 8-bit range (0-255)
+    # Apply Z-scale normalization and convert to 8-bit
     interval = ZScaleInterval(contrast=0.005)
     vmin, vmax = interval.get_limits(image_data)
+    image_data = np.clip((image_data - vmin) / (vmax - vmin) * 255, 0, 255).astype(
+        np.uint8
+    )
 
-    # delete previous jpgs
-    old_img_path = str(FRONTEND_PATH / f"*{OBSERVATORY.name}*.jpg")
-    for file in glob(old_img_path):
-        os.remove(file)
+    # Convert to JPEG bytes using Pillow (in-memory, no disk I/O)
+    img = Image.fromarray(image_data, mode="L")
+    buffer = BytesIO()
+    img.save(buffer, format="JPEG", quality=85)
+    buffer.seek(0)
 
-    # Save the jpg image
-    filename = os.path.splitext(os.path.basename(fits_file))[0] + ".jpg"
-    filepath = str(FRONTEND_PATH / filename)
-    plt.imsave(filepath, image_data, format="jpg", cmap="gray", vmin=vmin, vmax=vmax)
-
-    return str(Path("frontend") / filename), headers
+    return buffer.getvalue(), headers
 
 
 @asynccontextmanager
@@ -295,6 +300,30 @@ async def heartbeat():
     obs = OBSERVATORY
 
     return {"status": "success", "data": obs.heartbeat, "message": ""}
+
+
+@app.get("/api/latest_image_preview")
+async def latest_image_preview():
+    """Serve the latest FITS image as a JPEG preview.
+
+    Returns the most recent observatory image converted to JPEG format,
+    generated in-memory without disk I/O.
+
+    Returns:
+        StreamingResponse: JPEG image data with appropriate headers.
+    """
+    if LAST_IMAGE_PREVIEW is None:
+        return HTMLResponse(status_code=404, content="No image available")
+
+    jpeg_bytes, headers = LAST_IMAGE_PREVIEW
+    return StreamingResponse(
+        BytesIO(jpeg_bytes),
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Image-Timestamp": LAST_IMAGE_TIME.isoformat() if LAST_IMAGE_TIME else "",
+        },
+    )
 
 
 @app.get("/api/close")
@@ -1096,7 +1125,7 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket (WebSocket): WebSocket connection object.
         observatory (str): Observatory name for status monitoring.
     """
-    global LAST_IMAGE, LAST_IMAGE_JPG, USEFUL_HEADERS
+    global LAST_IMAGE, LAST_IMAGE_PREVIEW, LAST_IMAGE_TIME
 
     await websocket.accept()
 
@@ -1487,13 +1516,9 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception as e:
             logger.error(f"Error in websocket_endpoint: {e}", exc_info=True)
 
-        # if last_image_jpg is None:
-        #     # use placeholder image
-        #     last_image_jpg = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/600px-No_image_available.svg.png"
-
         # Check all image handlers for the most recent image
+        image_info = None
         if obs._image_handlers:
-            # Find the most recent image across all cameras
             most_recent_path = None
             most_recent_time = None
 
@@ -1506,15 +1531,29 @@ async def websocket_endpoint(websocket: WebSocket):
                         most_recent_path = handler.last_image_path
                         most_recent_time = handler.last_image_timestamp
 
-            # Convert to JPEG if we have a new image
+            # Update preview if we have a new image
             if most_recent_path is not None and LAST_IMAGE != most_recent_path:
                 LAST_IMAGE = most_recent_path
-                LAST_IMAGE_JPG, USEFUL_HEADERS = convert_fits_to_jpg(str(LAST_IMAGE))
+                LAST_IMAGE_TIME = most_recent_time
+                try:
+                    jpeg_bytes, headers = convert_fits_to_preview(str(LAST_IMAGE))
+                    LAST_IMAGE_PREVIEW = (jpeg_bytes, headers)
+                except Exception as e:
+                    logger.error(f"Error converting FITS to preview: {e}")
+
+            if LAST_IMAGE_PREVIEW is not None:
+                image_info = {
+                    "available": True,
+                    "timestamp": LAST_IMAGE_TIME.isoformat()
+                    if LAST_IMAGE_TIME
+                    else None,
+                    "headers": LAST_IMAGE_PREVIEW[1],
+                }
 
         data = {
             "table0": table0,
             "table1": table1,
-            "last_image": {"url": LAST_IMAGE_JPG, "useful_headers": USEFUL_HEADERS},
+            "last_image": image_info,
         }
 
         # make temp image, say how many images have been made?
