@@ -300,6 +300,12 @@ function plotWeather(data, update) {
     const tableHtml = generateWeatherTable(weather_parameters, latest_values, weather_safety_limits);
     document.getElementById(`weather-latest`).innerHTML = tableHtml;
 
+    // Remove loading indicator if present
+    const loadingIndicator = document.getElementById('weather-loading');
+    if (loadingIndicator) {
+        loadingIndicator.remove();
+    }
+
 
     // Helper function to create common plot marks
     const createCommonMarks = (

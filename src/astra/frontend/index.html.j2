@@ -263,7 +263,15 @@
 
                     <div class="flex-none flex flex-col h-full">
                         <div id="weather-latest"></div>
-                        <div class="w-full" id="weather-chart"></div>
+                        <div class="w-full" id="weather-chart">
+                            <div id="weather-loading" class="flex flex-col items-center justify-center py-12 text-gray-400">
+                                <svg class="animate-spin h-8 w-8 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>Loading weather data...</span>
+                            </div>
+                        </div>
                     </div>
 
                     {% elif nav == 'Controls' %}
@@ -509,6 +517,12 @@
                 div.scrollTop = 0;
             }
 
+            // Lazy load weather charts on first visit to Weather tab
+            if (element.id === 'weather' && !weatherChartsInitialized) {
+                weatherChartsInitialized = true;
+                updateWeatherChart(false);
+            }
+
 
         }
 
@@ -646,6 +660,7 @@
         let mousePos = { x: 0, y: 0 };
         let weatherDataCache;
         let weatherLatestTimestamp;
+        let weatherChartsInitialized = false;
 
         function updateWeatherLatestFromWebsocket(deviceData) {
             // Find ObservingConditions device data
@@ -1172,12 +1187,12 @@
         // update schedule table
         updateSchedule();
 
-        // init weather chart
-        updateWeatherChart(update = false);
-
-        // update weather chart
+        // Weather charts are lazy-loaded when the Weather tab is first clicked
+        // Update weather chart periodically (only if already initialized)
         setInterval(function () {
-            updateWeatherChart(update = true);
+            if (weatherChartsInitialized) {
+                updateWeatherChart(update = true);
+            }
         }, 30000);
 
         // update guiding chart (it checks internally if guiding is active)
