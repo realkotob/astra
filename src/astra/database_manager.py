@@ -133,7 +133,7 @@ class DatabaseManager:
             ),
         )
 
-    def create_database(self, max_queue_size: int = 2000) -> Sqlite3Worker:
+    def create_database(self, max_queue_size: int = 1000000) -> Sqlite3Worker:
         """
         Create and initialize the observatory database.
 
@@ -144,7 +144,7 @@ class DatabaseManager:
 
         Returns:
             Sqlite3Worker: The database cursor object for executing queries and managing
-            the database connection with a maximum queue size of 200.
+            the database connection with a maximum queue size of 1000000.
 
         Note:
             The database file is created in the logs directory using the observatory
