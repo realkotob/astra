@@ -499,7 +499,7 @@ function resizeImageAndProfiles() {
         }
         const roundedW = Math.round(displayW);
         const roundedH = Math.round(displayH);
-        
+
         const currentW = canvas.style.width ? parseInt(canvas.style.width, 10) : 0;
         const currentH = canvas.style.height ? parseInt(canvas.style.height, 10) : 0;
 
@@ -561,7 +561,7 @@ function updateProfileVisibility(profileWidth) {
     const hide = profileWidth === 0;
     const currentDisplay = yProfileCanvas.style.display;
     const targetDisplay = hide ? 'none' : 'block';
-    
+
     if (currentDisplay === targetDisplay) return;
 
     if (hide) {
