@@ -439,7 +439,16 @@
         let activeTableId = null;
 
         function updatePopupContent(rowData) {
-             let text = syntaxHighlight(rowData);
+             // Create a deep copy to sort and filter keys
+             let dataCopy = JSON.parse(JSON.stringify(rowData));
+             
+             // Remove meta keys from action_value if present
+             if (dataCopy && dataCopy.action_value) {
+                 if (dataCopy.action_value.EXAMPLE_SCHEDULE) delete dataCopy.action_value.EXAMPLE_SCHEDULE;
+                 if (dataCopy.action_value.FIELD_DESCRIPTIONS) delete dataCopy.action_value.FIELD_DESCRIPTIONS;
+             }
+
+             let text = syntaxHighlight(dataCopy);
 
             // Split the text into lines
             let lines = text.split('\n');
