@@ -36,14 +36,13 @@
             overflow: hidden;
         }
 
-        /* Style the cells */
+        /* Style the cells - Stacked for Mobile */
         .schedule-table td {
-            position: relative;
-            padding-left: 50%;
-            /* Create space for the label */
-            text-align: right;
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 0.75rem;
             border-bottom: 1px solid rgb(100 116 139 / 0.3);
-            /* Lighter slate border for cells */
         }
 
         .schedule-table tr td:last-child {
@@ -54,15 +53,13 @@
         /* Add data labels before each cell's content */
         .schedule-table td:before {
             content: attr(data-label);
-            position: absolute;
-            left: 0.75rem;
-            /* p-3 equivalent */
-            width: 45%;
-            padding-right: 0.75rem;
-            text-align: left;
+            display: block;
             font-weight: bold;
             color: #9ca3af;
-            /* text-gray-400 */
+            margin-bottom: 0.25rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         /* Optional: Desktop enhancement - Show traditional table on very large screens */
@@ -111,28 +108,30 @@
         <!-- Header -->
         <div class="bg-neutral-900/80 backdrop-blur-sm border-b border-gray-700/50 sticky top-0 z-40">
             <div class="max-w-7xl mx-auto px-4 py-4">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center space-x-4">
-                        <a href="/" class="text-gray-400 hover:text-white transition-colors"
-                            title="Back to Observatory">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                            </svg>
-                        </a>
-                        <div>
-                            <h1 class="text-2xl font-bold text-blue-300">Schedule Editor</h1>
-                            <p class="text-gray-300">Observatory: {{ observatory }}</p>
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center space-x-4 w-full md:w-auto justify-between md:justify-start">
+                        <div class="flex items-center gap-4">
+                            <a href="/" class="text-gray-400 hover:text-white transition-colors"
+                                title="Back to Observatory">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                            </a>
+                            <div>
+                                <h1 class="text-2xl font-bold text-blue-300">Schedule Editor</h1>
+                                <p class="text-gray-300">Observatory: {{ observatory }}</p>
+                            </div>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-4">
+                    <div class="flex items-center justify-between w-full md:w-auto space-x-4">
                         <div class="text-right">
-                            <div class="text-gray-400 text-sm">Current Time (UTC)</div>
+                            <div class="text-gray-400 text-sm hidden sm:block">Current Time (UTC)</div>
                             <div id="currentTime" class="font-mono text-lg">--:--:--</div>
                         </div>
                         <div class="flex items-center space-x-2">
                             <button id="saveScheduleBtn"
-                                class="px-6 py-3 bg-green-600/80 hover:bg-green-700/80 disabled:bg-gray-600/50 disabled:cursor-not-allowed rounded-lg text-base transition-colors font-medium">
+                                class="px-4 py-2 md:px-6 md:py-3 bg-green-600/80 hover:bg-green-700/80 disabled:bg-gray-600/50 disabled:cursor-not-allowed rounded-lg text-sm md:text-base transition-colors font-medium">
                                 <span id="saveButtonText">Save Schedule</span>
                             </button>
                         </div>
@@ -142,7 +141,7 @@
         </div>
 
         <!-- Main Content -->
-        <div class="max-w-7xl mx-auto p-6">
+        <div class="max-w-7xl mx-auto p-4 md:p-6">
             <!-- Status Modal -->
             <div id="statusModal"
                 class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center hidden">
@@ -165,7 +164,7 @@
             <input type="file" id="fileInput" accept=".jsonl,.json,.txt" style="display: none;">
 
             <!-- Schedule Visualization -->
-            <div class="bg-neutral-900/80 backdrop-blur-sm p-6 rounded-lg border border-gray-700/50 shadow-xl shadow-black/50 mb-6">
+            <div class="bg-neutral-900/80 backdrop-blur-sm p-4 md:p-6 rounded-lg border border-gray-700/50 shadow-xl shadow-black/50 mb-6">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-xl font-semibold">Schedule Timeline (UTC)</h2>
                     {# <button id="toggleChartBtn"
@@ -179,8 +178,8 @@
             </div>
 
             <!-- Schedule Editor -->
-            <div class="bg-neutral-900/80 backdrop-blur-sm p-6 rounded-lg border border-gray-700/50 shadow-xl shadow-black/50">
-                <div class="flex justify-between items-center mb-6">
+            <div class="bg-neutral-900/80 backdrop-blur-sm p-4 md:p-6 rounded-lg border border-gray-700/50 shadow-xl shadow-black/50">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <h2 class="text-xl font-semibold">Schedule</h2>
                     <div class="flex space-x-2">
                         <button id="sortByTimeBtn"
@@ -196,7 +195,7 @@
 
                 <!-- Drag and Drop Upload Zone -->
                 <div id="uploadZone"
-                    class="mb-6 border-2 border-dashed border-gray-600/50 rounded-lg p-6 text-center transition-colors duration-200 hover:border-slate-500/50 hover:bg-slate-900/10">
+                    class="mb-6 border-2 border-dashed border-gray-600/50 rounded-lg p-4 md:p-6 text-center transition-colors duration-200 hover:border-slate-500/50 hover:bg-slate-900/10">
                     <div class="flex flex-col items-center space-y-2">
                         <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -249,6 +248,12 @@
             </div>
         </div>
     </div>
+
+    <datalist id="camera-list">
+        {% for camera in cameras %}
+        <option value="{{ camera }}">
+        {% endfor %}
+    </datalist>
 
     <script>
 
@@ -365,6 +370,7 @@
         // Render the schedule chart
         function renderChart() {
             const chartContainer = document.getElementById('scheduleChart');
+            const isMobile = window.innerWidth < 768;
 
             if (!chartVisible) {
                 chartContainer.style.display = 'none';
@@ -426,29 +432,33 @@
                 return;
             }
 
+            const now = new Date();
+
             try {
                 // Create the plot
                 const plot = Plot.plot({
                     width: chartContainer.clientWidth - 40,
                     height: Math.max(400, chartData.length * 40 + 100),
-                    marginLeft: 150,
-                    marginRight: 100,
+                    marginLeft: isMobile ? 10 : 50,
+                    marginRight: isMobile ? 10 : 50,
                     marginTop: 40,
                     marginBottom: 60,
                     style: {
                         backgroundColor: "transparent",
-                        color: "#ffffff"
+                        color: "#ffffff",
+                        fontSize: isMobile ? "11px" : "14px"
                     },
                     x: {
-                        type: "time",
+                        type: "utc",
                         label: "Time (UTC)",
-                        tickFormat: d3.utcFormat("%H:%M"),
+                        tickFormat: "%H:%M",
                         grid: true
                     },
                     y: {
-                        label: "Schedule Items",
+                        label: isMobile ? "" : "Schedule Items",
                         domain: chartData.map(d => d.label),
-                        grid: true
+                        grid: true,
+                        tickFormat: null
                     },
                     color: {
                         legend: true,
@@ -466,6 +476,8 @@
                             x2: "end",
                             y: "label",
                             fill: "action_type",
+                            stroke: "#1f2937",
+                            strokeWidth: 1,
                             title: d => {
                                 const actionValueStr = JSON.stringify(d.action_value, null, 2);
                                 return `${d.device}: ${d.action_type}\n${d.start.toISOString().slice(0, 19)}Z to ${d.end.toISOString().slice(0, 19)}Z\nDuration: ${Math.round(d.duration / 60000)} minutes\n\nAction Value:\n${actionValueStr}`;
@@ -476,11 +488,20 @@
                         Plot.text(chartData, {
                             x: d => new Date((d.start.getTime() + d.end.getTime()) / 2),
                             y: "label",
-                            text: d => d.duration > 600000 ? d.action_type : "", // Only show text if bar is wide enough (10+ minutes)
+                            text: d => {
+                                if (d.duration < 900000) return ""; // Hide if < 15 mins
+                                return isMobile ? "" : d.action_type;
+                            },
                             fill: "#ffffff",
                             fontSize: 10,
                             fontWeight: "bold",
                             textAnchor: "middle"
+                        }),
+
+                        // Current time rule
+                        Plot.ruleX([now], {
+                            stroke: "yellow",
+                            strokeWidth: 2,
                         })
                     ]
                 });
@@ -824,6 +845,7 @@
                     </td>
                     <td class="p-2" data-label="Device Name">
                         <input type="text" value="${item.device_name || ''}" 
+                               list="camera-list"
                                class="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-2 py-1 text-sm focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition-colors"
                                onchange="updateItem(${index}, 'device_name', this.value)"
                                placeholder="Enter device name">
@@ -885,7 +907,7 @@
                             <button onclick="duplicateRow(${index})" 
                                     class="px-2 py-1 bg-blue-600 hover:bg-blue-700/80 rounded-lg text-xs transition-colors"
                                     title="Duplicate row">
-                                Copy
+                                Duplicate
                             </button>
                             <button onclick="deleteRow(${index})" 
                                     class="px-2 py-1 bg-red-600/80 hover:bg-red-700/80 rounded-lg text-xs transition-colors"

@@ -1622,6 +1622,11 @@ async def get_schedule(request: Request):
     except (FileNotFoundError, IOError):
         schedule_jsonl = ""
 
+    cameras = []
+    if obs and obs.device_manager:
+        cameras = list(obs.device_manager.devices.get("Camera", {}).keys())
+    cameras.sort()
+
     return FRONTEND.TemplateResponse(
         request=request,
         name="schedule.html.j2",
@@ -1629,6 +1634,7 @@ async def get_schedule(request: Request):
             "request": request,
             "observatory": OBSERVATORY.name,
             "schedule": schedule_jsonl,
+            "cameras": cameras,
         },
     )
 
