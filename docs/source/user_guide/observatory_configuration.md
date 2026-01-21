@@ -1,6 +1,6 @@
 # Observatory Configuration
 
-*Astra* requires a configuration file in YAML format for each observatory you want to operate. This file defines all devices, their settings, and how they interact with each other.
+_Astra_ requires a configuration file in YAML format for each observatory you want to operate. This file defines all devices, their settings, and how they interact with each other.
 
 Before setting up your observatory, you'll need to configure two main components:
 
@@ -19,7 +19,7 @@ This example configuration shows all supported device types and their parameters
 
 ## Device Types and Configuration
 
-*Astra* supports the following device types, all conforming to the ASCOM Alpaca standard:
+_Astra_ supports the following device types, all conforming to the ASCOM Alpaca standard:
 
 - **Telescope**
 - **Focuser**
@@ -72,7 +72,6 @@ Camera-specific parameters for cooling and imaging:
 **Sky Flat Parameters:**
 
 - `flats`: Configuration for automated flat field acquisition (dict)
-  
   - `target_adu`: Target median ADU value for sky flat frame (int)
   - `target_adu_tolerance`: Acceptable tolerance around target ADU (int)
   - `bias_offset`: Median bias level offset in ADU for exposure time calculations (int)
@@ -82,13 +81,11 @@ Camera-specific parameters for cooling and imaging:
 **Device Associations:**
 
 - `paired_devices`: Links to other devices for FITS headers and sequence coordination (dict)
-  
   - `<device_type>`: Must match the `device_name` used in device configuration (string)
 
 **Autofocus Parameters:**
 
 - `autofocus`: Configuration for automated focusing (dict)
-
   - `airmass_threshold`: Maximum airmass to query local star catalogue (float)
   - `exptime`: Exposure time for autofocus frames in seconds (float)
   - `g_mag_range`: Range of G magnitudes for star selection [min, max] (list of float)
@@ -105,7 +102,6 @@ Dome-specific parameters:
 Weather monitoring and safety parameters:
 
 - `closing_limits`: Weather safety thresholds that trigger observatory closure (dict)
-  
   - `<parameter>`: Weather parameter name (e.g., `Humidity`, `WindSpeed`, `Temperature`)
   - `<parameter>[i].upper/lower`: Threshold value - `upper` for maximum safe value, `lower` for minimum (float)
   - `<parameter>[i].max_safe_duration`: Time in minutes the parameter must stay within safe limits before `weather_safe` is set to `True` (int)
@@ -125,6 +121,13 @@ Safety system monitoring parameters:
 
 Optional observatory-wide settings:
 
-- `webcam`: URL for webcam feed (string, currently supports HLS stream format)
+- `Webcam`: Webcam feed configuration. The URL is embedded in an iframe element in the frontend. Can be:
+  - Single URL string for one webcam (e.g., `Webcam: http://localhost:8888/inside`)
+  - Array of objects for multiple webcams, each with `name` and `url` properties
+  - Supports HLS streams (e.g., [mediamtx](https://github.com/bluenviron/mediamtx)) or any iframe-compatible video source
+- `AllSky`: All-sky camera configuration. Images are fetched via `/api/allsky/latest` endpoint and automatically refreshed every 60 seconds. Can be:
+  - Single path string for one camera (e.g., `AllSky: /path/to/allsky.jpg`)
+  - Array of objects for multiple cameras, each with `name` and `path` properties
+  - Supports JPEG and PNG formats
 - `backup_time`: UTC time of day to perform automatic backups of polled data and logs (string, format: "HH:MM")
 - `filename_templates`: Customize how FITS files are named and organized (dict). See {py:mod}`astra.filename_templates` for more details.

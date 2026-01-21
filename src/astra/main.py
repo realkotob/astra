@@ -26,7 +26,6 @@ from datetime import UTC
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import numpy as np
 import pandas as pd
 import uvicorn
@@ -60,12 +59,11 @@ pd.set_option("future.no_silent_downcasting", True)
 # global variables
 logger = logging.getLogger(__name__)
 ConsoleStreamHandler.attach(logger)
-ConsoleStreamHandler.attach(logging.getLogger("httpx"), level=logging.WARNING)
 ConsoleStreamHandler.attach(logging.getLogger("astropy"), remove_other_handlers=True)
 
 FRONTEND_PATH = Path(__file__).parent / "frontend"
 OBSERVATORY: Observatory = None  # type: ignore
-WEBCAMFEED = {}
+WEBCAMFEEDS = []  # List of {name, url} dicts
 FWS = {}
 DEBUG = False
 FRONTEND = Jinja2Templates(directory=FRONTEND_PATH)
@@ -74,7 +72,7 @@ LAST_IMAGE_PREVIEW = None  # Stores (jpeg_bytes, headers) tuple
 LAST_IMAGE_TIME = None
 TRUNCATE_FACTOR = None
 CUSTOM_OBSERVATORY = None
-ALLSKY_PATH = None
+ALLSKY_FEEDS = []  # List of {name, path} dicts
 
 # Twilight calculation cache: stores (timestamp, start_time, end_time, periods)
 TWILIGHT_CACHE = None
@@ -106,12 +104,12 @@ def load_observatories() -> None:
 
     Discovers observatory config files, creates Observatory instances,
     establishes device connections, and sets up filter wheel mappings.
-    Updates global OBSERVATORY, WEBCAMFEED, and FWS dictionaries.
+    Updates global OBSERVATORY, WEBCAMFEEDS, and FWS dictionaries.
     """
     global OBSERVATORY  # not sure if this is necessary
-    global WEBCAMFEED
+    global WEBCAMFEEDS
     global FWS
-    global ALLSKY_PATH
+    global ALLSKY_FEEDS
 
     config_file = (
         Config().paths.observatory_config / f"{Config().observatory_name}_config.yml"
@@ -132,10 +130,29 @@ def load_observatories() -> None:
     OBSERVATORY = obs
 
     if "Misc" in obs.config:
+        # Normalize Webcam config to array format
         if "Webcam" in obs.config["Misc"]:
-            WEBCAMFEED = obs.config["Misc"]["Webcam"]
+            webcam_config = obs.config["Misc"]["Webcam"]
+            if isinstance(webcam_config, str):
+                # Backward compatibility: single URL string
+                WEBCAMFEEDS = [{"name": "Webcam", "url": webcam_config}]
+            elif isinstance(webcam_config, list):
+                # New format: array of objects
+                WEBCAMFEEDS = webcam_config
+            else:
+                logger.warning(f"Invalid Webcam config format: {webcam_config}")
+
+        # Normalize AllSky config to array format
         if "AllSky" in obs.config["Misc"]:
-            ALLSKY_PATH = obs.config["Misc"]["AllSky"]
+            allsky_config = obs.config["Misc"]["AllSky"]
+            if isinstance(allsky_config, str):
+                # Backward compatibility: single path string
+                ALLSKY_FEEDS = [{"name": "All-Sky", "path": allsky_config}]
+            elif isinstance(allsky_config, list):
+                # New format: array of objects
+                ALLSKY_FEEDS = allsky_config
+            else:
+                logger.warning(f"Invalid AllSky config format: {allsky_config}")
 
     obs.connect_all_devices()
 
@@ -269,41 +286,6 @@ except Exception as e:
     logger.error(f"Failed to register file explorer: {e}", exc_info=True)
 
 
-@app.get("/video/{filename:path}", include_in_schema=False)
-async def get_video(request: Request, filename: str):
-    """Proxy video streams from observatory webcams.
-
-    Forwards HTTP requests to webcam feeds, handling both MP4 video
-    streams and HTML content with appropriate media types.
-
-    Args:
-        request (Request): FastAPI request object with headers.
-        filename (str): Video filename or path to stream.
-
-    Returns:
-        StreamingResponse: Proxied video content with appropriate headers.
-    """
-    headers = request.headers
-    base_url = WEBCAMFEED
-    target_url = f"{base_url}/{filename}"
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(target_url, headers=headers)
-        content = response.content
-        status_code = response.status_code
-        headers = response.headers
-
-    if filename.endswith(".mp4"):
-        return StreamingResponse(
-            BytesIO(content),
-            status_code=status_code,
-            headers=headers,
-            media_type="video/mp4",
-        )
-    else:
-        return HTMLResponse(content, status_code=status_code, headers=headers)
-
-
 @app.get("/api/heartbeat")
 async def heartbeat():
     """Get observatory heartbeat status for health monitoring.
@@ -341,16 +323,37 @@ async def latest_image_preview():
 
 
 @app.get("/api/allsky/latest")
-async def get_allsky_image():
+async def get_allsky_image(name: str | None = None):
     """Serve the latest All-Sky camera image.
+
+    Args:
+        name (str, optional): Name of the specific all-sky camera.
+                             If not provided, returns the first camera.
 
     Returns:
         FileResponse: The image file with no-store cache headers.
     """
-    if ALLSKY_PATH and Path(ALLSKY_PATH).exists():
-        media_type, _ = mimetypes.guess_type(ALLSKY_PATH)
+    if not ALLSKY_FEEDS:
+        return HTMLResponse(status_code=404, content="No All-Sky cameras configured")
+
+    # Find the requested camera or use the first one
+    allsky_feed = None
+    if name:
+        allsky_feed = next(
+            (feed for feed in ALLSKY_FEEDS if feed.get("name") == name), None
+        )
+        if not allsky_feed:
+            return HTMLResponse(
+                status_code=404, content=f"All-Sky camera '{name}' not found"
+            )
+    else:
+        allsky_feed = ALLSKY_FEEDS[0]
+
+    allsky_path = allsky_feed.get("path")
+    if allsky_path and Path(allsky_path).exists():
+        media_type, _ = mimetypes.guess_type(allsky_path)
         return FileResponse(
-            ALLSKY_PATH,
+            allsky_path,
             media_type=media_type,
             headers={
                 "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -1593,7 +1596,7 @@ async def autofocus(request: Request):
         context={
             "request": request,
             # "observatories": list(OBSERVATORY.keys()),
-            # "webcamfeeds": WEBCAMFEED,
+            # "webcamfeeds": WEBCAMFEEDS,
             # "configs": {obs.name: obs.config for obs in OBSERVATORY.values()},
         },
     )
@@ -1667,9 +1670,10 @@ async def serve_files(request: Request, path: str = ""):
             context={
                 "request": request,
                 "observatory": OBSERVATORY.name,
-                "webcamfeeds": WEBCAMFEED,
+                "webcamfeeds": WEBCAMFEEDS,
+                "allsky_feeds": ALLSKY_FEEDS,
                 "config": OBSERVATORY.config,
-                "allsky_enabled": ALLSKY_PATH is not None,
+                "allsky_enabled": len(ALLSKY_FEEDS) > 0,
             },
         )
     elif path == "favicon.svg":
