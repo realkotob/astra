@@ -24,7 +24,6 @@ TIMESYS,str,true,astra_fixed,UTC,Time system used
 EXPTIME,float,true,astra,,[s] Exposure time
 LST,float,false,astra,,[s] Local Sidereal Time at start of exposure
 HA,str,false,astra,,[hms] Hour Angle
-UTC,float,false,astra,,[s] Coordinated Universal Time at start of exposure
 CHECKSUM,str,false,astra,,HDU checksum
 DATASUM,str,false,astra,,Data unit checksum
 ,,,,,
@@ -36,7 +35,7 @@ XORGSUBF,int,true,Camera,StartX,Subframe X position in binned pixels
 YORGSUBF,int,true,Camera,StartY,Subframe Y position in binned pixels
 CAM-SNAM,str,true,Camera,SensorName,Camera sensor name
 CAM-STYP,str,true,Camera,SensorType,Camera sensor type
-CAM-DNAM,str,true,Camera,Name,Short name of Camera driver
+CAM-DNAM,str,true,Camera,Name,Name of Camera driver
 CAM-DVER,str,true,Camera,DriverVersion,Camera driver version
 SET-TEMP,float,true,Camera,SetCCDTemperature,[Celsius] CCD temperature setpoint
 CCD-TEMP,float,false,Camera,CCDTemperature,[Celsius] CCD temperature at start of exposure
@@ -59,19 +58,19 @@ FOCALLEN,float,true,astra,FocalLength,[m] Focal length of telescope
 ALT-OBS,float,true,Telescope,SiteElevation,[m] Altitude above mean sea level
 LAT-OBS,float,true,Telescope,SiteLatitude,[deg +N WGS84] Geodetic latitude
 LONG-OBS,float,true,Telescope,SiteLongitude,[deg +E WGS84] Geodetic longitude
-ALTITUDE,float,false,Telescope,Altitude,[deg] Telescope altitude in horizontal coordinates
-AZIMUTH,float,false,Telescope,Azimuth,[deg] Telescope azimuth in horizontal coordinates
+ALTITUDE,float,false,Telescope,Altitude,[deg] Telescope altitude
+AZIMUTH,float,false,Telescope,Azimuth,[deg] Telescope azimuth
 AIRMASS,float,false,astra,,Averaged airmass
-TEL-DNAM,str,true,Telescope,Name,Short name of Telescope driver
+TEL-DNAM,str,true,Telescope,Name,Name of Telescope driver
 TEL-DVER,str,true,Telescope,DriverVersion,Telescope driver version
 TRACKING,bool,false,Telescope,Tracking,Tracking
 SLEWING,bool,false,Telescope,Slewing,Slewing
 TELPARK,bool,false,Telescope,AtPark,Telescope at park
-PIERSIDE,bool,false,Telescope,SideOfPier,ASCOM Telescope side of pier (1 = West 0 = East)
+PIERSIDE,bool,false,Telescope,SideOfPier,Telescope side of pier (1 = West 0 = East)
 ,,,,,
-DOMEAZ,float,false,Dome,Azimuth,[deg] Dome azimuth in horizontal coordinates
+DOMEAZ,float,false,Dome,Azimuth,[deg] Dome azimuth
 DOMESTAT,int,false,Dome,ShutterStatus,Dome shutter status
-DOM-DNAM,str,true,Dome,Name,Short name of Dome driver
+DOM-DNAM,str,true,Dome,Name,Name of Dome driver
 DOMPARK,bool,false,Dome,AtPark,Dome at park
 ,,,,,
 IMAGETYP,str,true,astra,,Type of image
@@ -82,10 +81,10 @@ AMBTEMP,float,false,ObservingConditions,Temperature,[Celsius] Ambient temperatur
 WINDSPD,float,false,ObservingConditions,WindSpeed,[m/s] Wind speed
 SKYTEMP,float,false,ObservingConditions,SkyTemperature,[Celsius] Sky temperature
 SKYLUX,float,false,ObservingConditions,SkyBrightness,[lux] Sky brightness
-OBC-DNAM,str,true,ObservingConditions,Name,Short name of ObservingConditions driver
+OBC-DNAM,str,true,ObservingConditions,Name,Name of ObservingConditions driver
 OBC-DVER,str,true,ObservingConditions,DriverVersion,ObservingConditions driver version
 ,,,,,
-SAF-DNAM,str,true,SafetyMonitor,Name,Short name of SafetyMonitor driver
+SAF-DNAM,str,true,SafetyMonitor,Name,Name of SafetyMonitor driver
 SAF-DVER,str,true,SafetyMonitor,DriverVersion,SafetyMonitor driver version
 ,,,,,
 JD-OBS,float,false,astra,,Julian Date at start of exposure
@@ -93,6 +92,6 @@ HJD-OBS,float,false,astra,,Heliocentric Julian Date at start of exposure
 BJD-OBS,float,false,astra,,Barycentric Julian Date at start of exposure
 JD-END,float,false,astra,,Julian Date at end of exposure
 MJD-END,float,false,astra,,Modified Julian Date at end of exposure
-DATE-END,str,false,astra,,[ISO 8601] UTC date/time at end of exposure
+DATE-END,str,false,astra,,UTC datetime at end of exposure
 ,,,,,
 ASTRA,str,true,astra,,Version of Astra
