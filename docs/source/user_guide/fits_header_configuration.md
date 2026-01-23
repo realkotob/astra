@@ -1,6 +1,6 @@
 # FITS Header Configuration
 
-*Astra* automatically generates comprehensive FITS headers for all captured images using
+_Astra_ automatically generates comprehensive FITS headers for all captured images using
 metadata from your observatory devices.
 This system ensures every image contains the scientific metadata required for analysis.
 
@@ -27,17 +27,17 @@ The CSV configuration file defines how FITS headers are constructed:
 
 ## How FITS Headers Are Created
 
-*Astra* creates FITS headers in two stages to ensure complete and accurate metadata:
+_Astra_ creates FITS headers in two stages to ensure complete and accurate metadata:
 
 ### 1. Base Headers (at the beginning of an imaging sequence)
 
-When an imaging sequence begins, *Astra* immediately creates an initial FITS header containing (if `fixed=true` in the configuration):
+When an imaging sequence begins, _Astra_ immediately creates an initial FITS header containing (if `fixed=true` in the configuration):
 
 - **Observatory information:** Site name, coordinates, altitude
-- **Optical system:** Aperture diameter, area, focal length  
+- **Optical system:** Aperture diameter, area, focal length
 - **Instrument details:** Camera settings, filter name, pixel scale
 - **Observation metadata:** Object name, exposure time, image type placeholders
-- **Software information:** *Astra* version number
+- **Software information:** _Astra_ version number
 - **Fixed device values:** Properties marked as `fixed=True` in the configuration
 
 `IMAGETYP` changes dynamically based on the imaging sequence (e.g., 'Light Frame', 'Dark Frame', 'Bias Frame', 'Flat Frame').
@@ -46,14 +46,13 @@ When an imaging sequence begins, *Astra* immediately creates an initial FITS hea
 
 ### 2. Final Headers (after exposure)
 
-After an imaging sequence, *Astra* completes any missing header values:
+After an imaging sequence, _Astra_ completes any missing header values:
 
 - Identifies images with incomplete headers
 - Retrieves device polling data from ±10 seconds around each exposure time (stored in a local sqlite database)
 - Interpolates device readings (temperature, pointing, focus position, etc.) to match exposure timestamps
 - Updates FITS files in place while preserving original header structure
 - Adds calculated values such as:
-  
   - Various time scales and reference frames
   - Derived parameters like airmass
 
@@ -64,5 +63,5 @@ This two-stage approach ensures headers contain accurate, time-synchronized meta
 You can customize the FITS headers by modifying the CSV configuration file:
 
 - **Adding headers:** Add new rows to include additional metadata
-- **Removing headers:** Delete rows to exclude certain keywords  
+- **Removing headers:** Delete rows to exclude certain keywords
 - **Timing control:** Set `fixed=True` for immediate values, `fixed=False` for post-exposure interpolated values

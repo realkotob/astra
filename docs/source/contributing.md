@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to *Astra*! This section describes how to set up your development environment and contribute to the project.
+Thank you for your interest in contributing to _Astra_! This section describes how to set up your development environment and contribute to the project.
 
 ## Development Setup
 
@@ -10,8 +10,8 @@ Thank you for your interest in contributing to *Astra*! This section describes h
    git clone https://github.com/ppp-one/astra.git
    cd astra
    ```
-4. Set up a reproducible development environment with [*uv*](https://docs.astral.sh/uv/):
-   See the [*uv* documentation](https://docs.astral.sh/uv/getting-started/installation/) for installation instructions.
+3. Set up a reproducible development environment with [_uv_](https://docs.astral.sh/uv/):
+   See the [_uv_ documentation](https://docs.astral.sh/uv/getting-started/installation/) for installation instructions.
 
    Then, run the following commands to sync dependencies and set up pre-commit hooks:
 
@@ -34,9 +34,9 @@ Thank you for your interest in contributing to *Astra*! This section describes h
 
 ## Code Style
 
-*Astra* follows these coding conventions:
+_Astra_ follows these coding conventions:
 
-- We use [*Ruff*](https://docs.astral.sh/ruff/) for linting and code formatting
+- We use [_Ruff_](https://docs.astral.sh/ruff/) for linting and code formatting
 - Maximum line length is 88 characters
 - Docstrings follow the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html#s3.8-comments-and-docstrings)
 
@@ -79,7 +79,7 @@ uv run --dev pytest -m "not slow"
 
 ## Versioning
 
-*Astra* follows semantic versioning. Version numbers follow the format `MAJOR.MINOR.PATCH`:
+_Astra_ follows semantic versioning. Version numbers follow the format `MAJOR.MINOR.PATCH`:
 
 - `MAJOR`: incompatible API changes
 - `MINOR`: new functionality in a backwards-compatible manner
