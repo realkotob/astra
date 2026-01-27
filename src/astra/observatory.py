@@ -2517,6 +2517,7 @@ class Observatory:
                     raise ValueError(
                         "Target RA/DEC not provided in action_value and failed to get from telescope."
                     ) from e
+            use_local_db = action_value.get("use_local_db", False)
             (
                 pointing_correction,
                 image_star_mapping,
@@ -2529,6 +2530,7 @@ class Observatory:
                 filter_band=action_value.get("filter", None),
                 fraction_of_stars_to_match=0.70,
                 or_min_number_of_stars_to_match=8,
+                use_local_db=use_local_db,
             )
 
             number_of_matched_stars = image_star_mapping.number_of_matched_stars()

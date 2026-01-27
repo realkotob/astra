@@ -862,8 +862,7 @@ class PointingModelActionConfig(BaseActionConfig):
     exptime: float = 1.0
     dark_subtraction: bool = False
     object: str = "Pointing Model"
-    ra: Optional[float] = None
-    dec: Optional[float] = None
+    use_local_db: bool = False
     filter: Optional[str] = None
     focus_shift: Optional[float] = None
     focus_position: Optional[float] = None
@@ -879,8 +878,7 @@ class PointingModelActionConfig(BaseActionConfig):
         "exptime": "Exposure time for each pointing image.",
         "dark_subtraction": "Enable dark subtraction using matching calibration frames.",
         "object": "Descriptive label for the pointing run.",
-        "ra": "Right Ascension for starting point when overriding automatic selection.",
-        "dec": "Declination for starting point when overriding automatic selection.",
+        "use_local_db": "Use local star catalog database for plate solving (faster).",
         "filter": "Filter to use for exposures.",
         "focus_shift": "Focus offset relative to best focus.",
         "focus_position": "Absolute focus position override.",

@@ -79,6 +79,7 @@ def calculate_pointing_correction_from_fits(
     filter_band: Optional[str] = None,
     fraction_of_stars_to_match: float = 0.70,
     or_min_number_of_stars_to_match: int = 8,
+    use_local_db: bool = False,
 ):
     """
     Calculate pointing correction from a FITS file.
@@ -99,6 +100,7 @@ def calculate_pointing_correction_from_fits(
             required to be matched for a valid plate solve. Defaults to 0.70.
         or_min_number_of_stars_to_match (int, optional): Minimum number of stars
             required to be matched for a valid plate solve. Defaults to 8.
+        use_local_db (bool, optional): Whether to use the local Gaia database. Defaults to False.
 
     Returns:
         Tuple[PointingCorrection, ImageStarMapping, int]: A tuple containing:
@@ -133,6 +135,7 @@ def calculate_pointing_correction_from_fits(
         filter_band=filter_band,
         fraction_of_stars_to_match=fraction_of_stars_to_match,
         or_min_number_of_stars_to_match=or_min_number_of_stars_to_match,
+        use_local_db=use_local_db,
     )
 
 
@@ -145,6 +148,7 @@ def calculate_pointing_correction_from_image(
     filter_band: Optional[str] = None,
     fraction_of_stars_to_match: float = 0.70,
     or_min_number_of_stars_to_match: int = 8,
+    use_local_db: bool = False,
 ):
     """
     Calculate pointing correction from an image array.
@@ -163,6 +167,7 @@ def calculate_pointing_correction_from_image(
             required to be matched for a valid plate solve. Defaults to 0.70.
         or_min_number_of_stars_to_match (int, optional): Minimum number of stars
             required to be matched for a valid plate solve. Defaults to 8.
+        use_local_db (bool, optional): Whether to use the local Gaia database. Defaults to False.
 
     Returns:
         Tuple[PointingCorrection, ImageStarMapping, int]: A tuple containing:
@@ -200,6 +205,7 @@ def calculate_pointing_correction_from_image(
         filter_band=filter_band,
         fov_scale=1.25,
         limit=int(2 * stars_in_image_used),
+        use_local_db=use_local_db,
     )
 
     image_star_mapping = ImageStarMapping.from_gaia_coordinates(
@@ -644,6 +650,7 @@ def _get_gaia_star_coordinates(
     filter_band=None,
     fov_scale=1.1,
     limit=24,
+    use_local_db: bool = False,
 ):
     """
     Get Gaia star coordinates for a given field of view.
@@ -657,6 +664,7 @@ def _get_gaia_star_coordinates(
         filter_band (str, optional): Filter band used for observation.
         fov_scale (float, optional): Factor to scale field of view. Defaults to 1.1.
         limit (int, optional): Maximum number of stars to query. Defaults to 24.
+        use_local_db (bool, optional): Whether to use the local Gaia database. Defaults to False.
 
     Returns:
         np.ndarray: Array of Gaia star coordinates.
@@ -668,26 +676,29 @@ def _get_gaia_star_coordinates(
     # Try online query first (if local DB doesn't exist, this is the only option)
     has_local_db = Config().gaia_db.is_file()
 
-    try:
-        table = cabaret.GaiaQuery.query(
-            center=(ra, dec),
-            radius=np.max(fov) / 2,
-            filter_band=gaia_tmass_filter,
-            limit=limit,
-            timeout=60,
-        )
-        table_filt = cabaret.GaiaQuery._apply_proper_motion(table, dateobs).copy()
-        return np.array([table_filt["ra"].value.data, table_filt["dec"].value.data]).T
+    if use_local_db is False:
+        try:
+            table = cabaret.GaiaQuery.query(
+                center=(ra, dec),
+                radius=np.max(fov) / 2,
+                filter_band=gaia_tmass_filter,
+                limit=limit,
+                timeout=60,
+            )
+            table_filt = cabaret.GaiaQuery._apply_proper_motion(table, dateobs).copy()
+            return np.array(
+                [table_filt["ra"].value.data, table_filt["dec"].value.data]
+            ).T
 
-    except Exception as e:
-        if not has_local_db:
-            raise Exception(
-                "Failed to query online Gaia database and no local fallback available"
-            ) from e
+        except Exception as e:
+            if not has_local_db:
+                raise Exception(
+                    "Failed to query online Gaia database and no local fallback available"
+                ) from e
 
-        logger.warning(
-            f"Online Gaia query failed with error: {e}. Falling back to local database."
-        )
+            logger.warning(
+                f"Online Gaia query failed with error: {e}. Falling back to local database."
+            )
 
     # Fall back to local database
     use_tmass = gaia_tmass_filter in ["J", "H", "KS"]
