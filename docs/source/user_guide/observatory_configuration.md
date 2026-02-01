@@ -83,13 +83,6 @@ Camera-specific parameters for cooling and imaging:
 - `paired_devices`: Links to other devices for FITS headers and sequence coordination (dict)
   - `<device_type>`: Must match the `device_name` used in device configuration (string)
 
-**Autofocus Parameters:**
-
-- `autofocus`: Configuration for automated focusing (dict)
-  - `airmass_threshold`: Maximum airmass to query local star catalogue (float)
-  - `exptime`: Exposure time for autofocus frames in seconds (float)
-  - `g_mag_range`: Range of G magnitudes for star selection [min, max] (list of float)
-
 ## Dome Configuration
 
 Dome-specific parameters:

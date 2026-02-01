@@ -50,12 +50,6 @@ Camera:
       ObservingConditions: weather_observatoryname
       SafetyMonitor: safety_observatoryname
       Camera: camera_observatoryname
-    autofocus:
-      airmass_threshold: 1.01
-      exptime: 3.0
-      g_mag_range:
-        - 0
-        - 10
 Dome:
   - device_name: dome_observatoryname
     ip: localhost:11111

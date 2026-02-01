@@ -1023,7 +1023,7 @@ class AutofocusConfig(BaseActionConfig):
         6. Save plots/results and optionally persist the best focus position
     """
 
-    exptime: float | int = field(default=3.0, metadata={"required": True})
+    exptime: float | int = field(default=3.0)
     filter: Optional[str] = None
     reduce_exposure_time: bool = False
     search_range: Optional[List[int] | int] = None

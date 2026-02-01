@@ -566,16 +566,11 @@ class Autofocuser:
         self.success = success
         self.config: AutofocusConfig = action.action_value  # type: ignore
 
-        default_dict = paired_devices.get_device_config("Camera").get("autofocus", {})
-        logging.info(f"default_dict {default_dict}")
-
         if (
             self.config.calibration_field.fov_width == 0
             or self.config.calibration_field.fov_height == 0
         ):
-            fov_width, fov_height = self.determine_default_field_of_view(
-                paired_devices, default_dict
-            )
+            fov_width, fov_height = self.determine_default_field_of_view(paired_devices)
             self.config.calibration_field.fov_width = fov_width
             self.config.calibration_field.fov_height = fov_height
 
@@ -1228,10 +1223,10 @@ class Autofocuser:
 
         return field_of_view
 
-    def determine_default_field_of_view(self, paired_devices, default_dict):
+    def determine_default_field_of_view(self, paired_devices):
         field_of_view = self.calculate_field_of_view(paired_devices)
-        fov_width = float(default_dict.get("fov_width", field_of_view[0]))
-        fov_height = float(default_dict.get("fov_height", field_of_view[1]))
+        fov_width = float(field_of_view[0])
+        fov_height = float(field_of_view[1])
 
         self.observatory.logger.info(
             f"Determined field of view width={fov_width}, height={fov_height}."
