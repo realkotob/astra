@@ -4,6 +4,8 @@ Telescope:
     device_number: 0
     pointing_threshold: 0.1 # arcmins
     settle_factor: 0.0 # exposure multiplier for calculated settle time after pointing (for SPIRIT like cameras)
+    meridian_flip: false # enable automated meridian flips
+    meridian_flip_min: 5 # minutes past meridian to trigger flip
     guider: # populated using calibrate_guiding sequence
       PIX2TIME: # ms/pixel for camera used for guiding
         +x: 71.62908053771561

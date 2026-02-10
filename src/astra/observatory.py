@@ -44,6 +44,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 import psutil
+from alpaca.telescope import PierSide
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord, get_body
 from astropy.io import fits
 from astropy.time import Time
@@ -2098,6 +2099,66 @@ class Observatory:
 
         return exposure_successful, filepath
 
+    def _check_and_perform_meridian_flip(
+        self, action: Action, paired_devices: PairedDevices, guiding: bool
+    ) -> bool:
+        """
+        Check if meridian flip is required and perform it.
+
+        Returns:
+            bool: True if flip was performed, False otherwise.
+        """
+        try:
+            telescope = paired_devices.telescope
+
+            # Calculate HA first to optimize device calls
+            # Use telescope coordinates to handle all input types (RA/DEC, Alt/Az, Object Name)
+            lst = telescope.get("SiderealTime")
+            ra = telescope.get("RightAscension")  # RA in hours
+
+            ha = lst - ra
+            # Normalize to -12 to +12
+            if ha > 12:
+                ha -= 24
+            if ha < -12:
+                ha += 24
+
+            telescope_config = paired_devices.get_device_config("Telescope")
+            flip_min = telescope_config.get("meridian_flip_min", 5)
+
+            # Optimization: If we are not past the meridian buffer yet, we can't flip.
+            # This avoids the SideOfPier call for all images on the East side (HA < 0).
+            if ha <= (flip_min / 60.0):
+                return False
+
+            # Only check SideOfPier if necessary (HA > buffer)
+            side_of_pier = telescope.get("SideOfPier")
+
+            # If passed meridian (HA > buffer) AND SideOfPier is East (pointing West)
+            # flip_min is in minutes
+            if side_of_pier == PierSide.pierEast:
+                self.logger.info(
+                    f"Meridian flip required (HA={ha:.2f}h, SideOfPier={side_of_pier})"
+                )
+
+                # Stop Guiding
+                if guiding:
+                    self.guider_manager.stop_guider(
+                        paired_devices["Telescope"],
+                        thread_manager=self.thread_manager,
+                    )
+
+                # Perform Flip (Slew)
+                self.setup_observatory(paired_devices, action.action_value)
+
+                self.logger.info("Meridian flip completed")
+                return True
+
+        except Exception as e:
+            self.logger.error(f"Error checking/performing meridian flip: {e}")
+
+        return False
+
     def image_sequence(self, action: Action, paired_devices: PairedDevices) -> None:
         """
         Execute a sequence of astronomical images with a camera.
@@ -2166,6 +2227,17 @@ class Observatory:
         guiding = False
         wcs_solve = None
 
+        # Check if automated meridian flip is enabled in config
+        meridian_flip_enabled = False
+        if "Telescope" in paired_devices:
+            try:
+                telescope_config = paired_devices.get_device_config("Telescope")
+                meridian_flip_enabled = telescope_config.get("meridian_flip", False)
+            except Exception:
+                pass
+
+        last_flip_check_time = 0
+
         for i, exptime in enumerate(exptime_list):
             if not self.check_conditions(action):
                 break
@@ -2173,6 +2245,19 @@ class Observatory:
             n_exposures = n_exposures_list[i]
 
             for exposure in range(n_exposures):
+                # Check for meridian flip every minute
+                if meridian_flip_enabled:
+                    current_time = time.time()
+                    if (
+                        current_time - last_flip_check_time > 60
+                    ) and self.check_conditions(action):
+                        last_flip_check_time = current_time
+                        if self._check_and_perform_meridian_flip(
+                            action, paired_devices, guiding
+                        ):
+                            guiding = False
+                            pointing_complete = False
+
                 if action_value.get("n"):
                     log_option = f"{exposure + 1}/{n_exposures}"
                 else:

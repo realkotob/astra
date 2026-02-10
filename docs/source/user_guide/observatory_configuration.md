@@ -56,6 +56,8 @@ Additional parameters for telescope mounts:
 
 - `pointing_threshold`: Maximum acceptable pointing error in arcminutes if pointing correction enabled (float)
 - `settle_factor`: Exposure multiplier for calculated settle time after pointing (float)
+- `meridian_flip`: Enable automated meridian flips (boolean, default: false)
+- `meridian_flip_min`: Buffer time in minutes past meridian to trigger flip (float, default: 5)
 - `guider`: Autoguider calibration settings (dict, populated automatically by the calibrate_guiding sequence)
 
 ## Focuser Configuration
