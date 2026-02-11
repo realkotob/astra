@@ -6,7 +6,7 @@
 :alt: banner
 ```
 
-_Astra_ prioritizes safe, fully automated robotic observing. This guide details operational workflows including startup, initial calibration, the web interface, watchdog mechanisms, weather safety, core logic, and troubleshooting.
+_Astra_ prioritizes safe, fully automated robotic observing. This guide details operational workflows including first schedule, the web interface, startup options, and troubleshooting.
 
 ## Prerequisites
 
@@ -14,10 +14,10 @@ For reliable and safe operation, please ensure the following prerequisites are m
 
 - **Independent Safety:** An independent safety system is in place to monitor the observatory and weather (exposing its state as an ASCOM SafetyMonitor).
   - This system must be capable of independently closing the observatory should the computer running _Astra_ fail.
-  - **Recommendation:** Configure the independent safety monitor with slightly relaxed weather thresholds compared to _Astra_. This ensures _Astra_ triggers closure first, reserving the independent system as a fail-safe.
+  - **Recommendation:** Configure the independent safety monitor with slightly relaxed weather thresholds compared to _Astra_ (e.g., safety monitor set to trigger at 10% higher wind speeds than _Astra_). This ensures _Astra_ triggers closure first, reserving the independent system as a fail-safe.
 
 - **Properly Configured Hardware:** All device hardware is connected, aligned, and the dome is slaved (if not roll-off). In the [observatory configuration](observatory_configuration), please ensure:
-  - `close_dome_on_telescope_error` flag is set correctly for your needs, default is `false`.
+  - `close_dome_on_telescope_error` flag is set correctly for your needs, default is `false`. Independent to this, the observatory will always close if a non-telescope/dome device encounters an error.
   - The `focus_position` is set to a known good value.
   - The target camera `temperature` is defined; _Astra_ uses this value during cooling sequences.
 
@@ -81,7 +81,7 @@ Once focused, build a pointing model. Each pointing is plate solved and sends Sy
 ``` -->
 
 **3. Calibrate guiding**
-Finally, calibrate the autoguider parameters by measuring the response of PulseGuide command and the orientation of the camera on sky.
+Finally, calibrate the autoguider parameters. The schedule measures the response of the PulseGuide command and the orientation of the camera on the sky.
 
 ```json
 // Calibrate Guiding
@@ -108,13 +108,13 @@ Please restart _Astra_ after this first schedule in order to load the guiding ca
 Top portion of _Astra_'s web interface
 ```
 
-_Astra_ provides a modern web interface for monitoring and control. API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs) after startup or here at [API Endpoints](../api/endpoints).
+_Astra_ provides a modern web interface for monitoring and control. If needed, API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs) after startup or here at [API Endpoints](../api/endpoints) -- but most users will interact with the web interface for operation.
 
 The header bar displays critical system status:
 
 - **Observatory Name**: Turns red if system errors are present.
 - **UTC Time**: Current universal time.
-- **Watchdog Status**: Green when the watchdog is running, red if stopped.
+- **Watchdog Status**: Green when the watchdog is running, red if stopped. It should always be running during operation to ensure safety mechanisms are active. If stopped, the system will not execute any schedule actions and will ignore weather and device statuses.
 - **Weather Status**: Green indicates safe conditions, red indicates unsafe - dictated by the SafetyMonitor and internal safety monitor logic.
 - **Schedule Status**: Green when a schedule is active, gray when idle.
 - **Robotic Operations Switch**: The master switch for automated control (green=enabled, gray=disabled).
@@ -129,7 +129,7 @@ The interface is organized into four main operational views:
 
 - **Summary**: Real-time dashboard of device status, error states, and polled data. Also displays the latest scientific images and, if configured, live webcam or all-sky feeds.
 - **Logs**: Centralized view for system and device logs. It also displays the currently loaded schedule and line-by-line execution status, and guiding graphs.
-- **Weather**: Detailed environmental monitoring including 3-day graph history, current values, and safety limit thresholds used by the internal safety monitor logic (defined in the observatory configuration).
+- **Weather**: Detailed environmental monitoring including 3-day graph history, current values, and safety limit thresholds used by the internal safety monitor logic (defined in the [observatory configuration](observatory_configuration.md#observingconditions-configuration)).
 - **Controls**: Sky map showing telescope position and some manual override controls.
 
 ## Startup Options
@@ -161,10 +161,9 @@ In most cases you will run `astra` without any additional options.
 - **Weather**: Weather-dependent actions do not run during unsafe conditions.
 - **Consistency**: Check that device names in the schedule match `observatory.yaml`.
 - **Conflicts**: Check for timing overlaps or impossible constraints.
-- **Dependencies**: Ensure required paired devices (e.g., Focuser for Autofocus) are configured.
+- **Dependencies**: Ensure required paired devices are configured.
 
 **Incomplete Sequences?**
 
-- **Logs**: Check "Error" logs for device timeouts or disconnects.
 - **Safety**: Intermittent weather issues can abort a running sequence.
 - **Timing**: Ensure sufficient duration was allocated for the action to complete.

@@ -122,7 +122,7 @@ Safety system monitoring parameters:
 
 Optional observatory-wide settings:
 
-- `backup_time`: UTC time of day to perform automatic backups of polled data and logs on the SQLite database (string, format: "HH:MM")
+- `backup_time`: UTC time of day to perform automatic daily backups of polled data and logs on the SQLite database (string, format: "HH:MM")
 - `Webcam`: Webcam feed configuration. The URL is embedded in an iframe element in the frontend. Can be:
   - Single URL string for one webcam (e.g., `Webcam: http://localhost:8888/inside`)
   - Array of objects for multiple webcams, each with `name` and `url` properties

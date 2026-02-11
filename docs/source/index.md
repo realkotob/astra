@@ -97,8 +97,8 @@ user_guide/observatory_configuration
 user_guide/fits_header_configuration
 user_guide/scheduling
 user_guide/operation
-user_guide/custom_observatories
 user_guide/core_logic
+user_guide/custom_observatories
 ```
 
 ```{toctree}

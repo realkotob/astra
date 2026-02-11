@@ -32,11 +32,12 @@ Inter-process communication in *Astra* using separate device processes.
 ```
 
 **Data Management**
+
 All polled data and logs are stored in a local SQLite database. To handle high-concurrency writes from multiple device processes without locking issues, _Astra_ uses a dedicated **Database Worker**.
 
 - Devices send data to a shared queue.
 - The Database Worker consumes the queue and handles all write operations.
-- The Watchdog reads historical weather data from the DB to make informed safety decisions.
+- The Watchdog reads historical weather data from the database to make informed safety decisions.
 
 **Communication**
 
@@ -52,7 +53,7 @@ The watchdog is the backbone of _Astra_'s operational safety and automation. It 
 - **Weather Safety**: Automatically closes the observatory if the SafetyMonitor or ObservingConditions report unsafe parameters.
 - **Device Health**: Tracks connectivity and responsiveness of all hardware.
 - **Error Management**: In the event of system errors or critical device failures, the observatory is automatically safely closed.
-- **Schedule Execution**: Triggers the scheduler when the Robotic Operations Switch is enabled and a valid schedule is authorized.
+- **Schedule Execution**: Triggers the scheduler when the Robotic Operations Switch is enabled and a valid schedule is loaded.
 - **System Heartbeat**: Maintains a real-time status object (accessible via API) for external monitoring services.
 - **Data Retention**: Archives the last 24 hours of logs to CSV format daily and purges database records older than 3 days to maintain performance.
 
