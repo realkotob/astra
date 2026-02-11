@@ -32,6 +32,17 @@ For background on subclassing and inheritance in Python, see e.g.
 [Python inheritance tutorial](https://docs.python.org/3/tutorial/classes.html#inheritance)
 in the official documentation.
 
+````{admonition} Astra CLI Observatory Selection
+When running `astra` from the command line, you can specify the observatory name using the `--observatory` flag, e.g.:
+
+```bash
+astra --observatory SPECULOOS
+```
+
+This will trigger the `ObservatoryLoader` to search for a subclass matching "SPECULOOS" (case-insensitive) and load it if found. If no match is found, the default `Observatory` class will be used.
+
+````
+
 ## Example SPECULOOS
 
 Being ASTELCO made observatories, SPECULOOS telescopes are subject to certain
