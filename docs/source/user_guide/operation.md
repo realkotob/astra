@@ -94,9 +94,7 @@ Finally, calibrate the autoguider parameters. The schedule measures the response
 }
 ```
 
-<!-- TODO: auto update the guider config after calibrate_guiding -->
-
-Please restart _Astra_ after this first schedule in order to load the guiding calibration parameters into _Astra_. After this, you can run science observation schedules with guiding enabled.
+After this, you can run science observation schedules with guiding enabled.
 
 ## Web Interface
 

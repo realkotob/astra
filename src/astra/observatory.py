@@ -2767,6 +2767,13 @@ class Observatory:
             guiding_calibrator.save_calibration_config()
             guiding_calibrator.update_observatory_config()
 
+            # Calibration updates guider parameters in observatory config.
+            # Reload guider runtime parameters for this telescope immediately.
+            self.guider_manager.refresh_telescope_from_config(
+                observatory=self,
+                telescope_name=paired_devices["Telescope"],
+            )
+
             self.logger.info(f"Guiding calibration for {action.device_name} completed")
             success = True
 

@@ -86,7 +86,7 @@ _Astra_'s JSONL files support comments using lines that start with `//`:
 
 Place your schedule file in the observatory schedules directory with a `.jsonl` extension. For example:
 
-- `~/Documents/Astra/schedules/<observatory_name>.jsonl`
+- `~/Documents/Astra/schedules/{observatory_name}.jsonl`
 
 _Astra_ will automatically detect and load the JSONL schedule file, with the specified name pattern, if modified.
 

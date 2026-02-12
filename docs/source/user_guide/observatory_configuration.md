@@ -93,7 +93,7 @@ Camera-specific parameters for cooling and imaging:
 **Device Associations:**
 
 - `paired_devices`: Links to other devices for FITS headers and sequence coordination (dict)
-  - `<device_type>`: `<device_name>` which must match the name used in device configuration (string)
+  - `{device_type}`: `{device_name}` which must match the name used in device configuration (string)
 
 ## Dome Configuration
 
@@ -107,9 +107,9 @@ Dome-specific parameters:
 Weather monitoring and safety parameters:
 
 - `closing_limits`: Weather safety thresholds that trigger observatory closure (dict)
-  - `<parameter>`: Weather parameter name (e.g., `Humidity`, `WindSpeed`, `Temperature`)
-  - `<parameter>[i].upper/lower`: Threshold value - `upper` for maximum safe value, `lower` for minimum (float)
-  - `<parameter>[i].max_safe_duration`: Time in minutes the parameter must stay within safe limits before `weather_safe` is set to `True` (int)
+  - `{parameter}`: Weather parameter name (e.g., `Humidity`, `WindSpeed`, `Temperature`)
+  - `{parameter}[i].upper/lower`: Threshold value - `upper` for maximum safe value, `lower` for minimum (float)
+  - `{parameter}[i].max_safe_duration`: Time in minutes the parameter must stay within safe limits before `weather_safe` is set to `True` (int)
 
 **Supported Parameters:**
 

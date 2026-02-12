@@ -99,6 +99,59 @@ class GuiderManager:
 
         return cls(guider_dict, observatory.logger, observatory.database_manager)
 
+    def refresh_telescope_from_config(
+        self, observatory: Any, telescope_name: str
+    ) -> bool:
+        """Reload guider parameters for a single telescope from observatory config.
+
+        This is intended for post-guiding-calibration updates where the telescope's
+        ``guider`` block has been modified and persisted to observatory config.
+
+        Parameters:
+            observatory: Observatory instance providing devices/config/logger/database.
+            telescope_name (str): Telescope device name to refresh guider for.
+
+        Returns:
+            bool: True if guider was created/refreshed, False otherwise.
+        """
+        if "Telescope" not in observatory.devices:
+            self.logger.warning("No telescopes found; skipping guider refresh")
+            return False
+
+        if telescope_name not in observatory.devices["Telescope"]:
+            self.logger.warning(
+                f"Telescope {telescope_name} not found in devices; skipping guider refresh"
+            )
+            return False
+
+        telescope_config = next(
+            (
+                d
+                for d in observatory.config.get("Telescope", [])
+                if d.get("device_name") == telescope_name
+            ),
+            None,
+        )
+
+        if telescope_config is None or "guider" not in telescope_config:
+            self.logger.warning(
+                f"No guider config found for telescope {telescope_name}; skipping guider refresh"
+            )
+            if telescope_name in self.guider:
+                del self.guider[telescope_name]
+            return False
+
+        self.guider[telescope_name] = Guider(
+            observatory.devices["Telescope"][telescope_name],
+            logger=observatory.logger,
+            database_manager=observatory.database_manager,
+            params=telescope_config["guider"],
+        )
+        self.logger.info(
+            f"Reloaded guider parameters from config for telescope {telescope_name}"
+        )
+        return True
+
     def start_guider(
         self,
         image_handler: ImageHandler,
