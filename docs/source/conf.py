@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath("."))
 
 # Project information
 project = "Astra"
-copyright = "2025, Peter Pedersen"
+copyright = "2026, Peter Pedersen"
 author = "Peter Pedersen"
 
 # The full version, including alpha/beta/rc tags
