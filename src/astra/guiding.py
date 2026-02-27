@@ -581,7 +581,7 @@ class Guider:
         # using >= allows for the stabilising runs to get through
         # abs() on -ve duration otherwise throws back an error
         if pidy > 0 and pidy <= CURRENT_MAX_SHIFT and self.running:
-            guide_time_y = pidy * self.PIX2TIME["+y"] / binning
+            guide_time_y = pidy * self.PIX2TIME["+y"] * binning
 
             y_p_dir = self.DIRECTIONS["+y"]
             if self.RA_AXIS == "y":
@@ -602,7 +602,7 @@ class Guider:
             )
 
         if pidy < 0 and pidy >= -CURRENT_MAX_SHIFT and self.running:
-            guide_time_y = abs(pidy * self.PIX2TIME["-y"] / binning)
+            guide_time_y = abs(pidy * self.PIX2TIME["-y"] * binning)
 
             y_n_dir = self.DIRECTIONS["-y"]
             if self.RA_AXIS == "y":
@@ -632,7 +632,7 @@ class Guider:
             time.sleep(0.01)
 
         if pidx > 0 and pidx <= CURRENT_MAX_SHIFT and self.running:
-            guide_time_x = pidx * self.PIX2TIME["+x"] / binning
+            guide_time_x = pidx * self.PIX2TIME["+x"] * binning
 
             x_p_dir = self.DIRECTIONS["+x"]
             if self.RA_AXIS == "x":
@@ -653,7 +653,7 @@ class Guider:
             )
 
         if pidx < 0 and pidx >= -CURRENT_MAX_SHIFT and self.running:
-            guide_time_x = abs(pidx * self.PIX2TIME["-x"] / binning)
+            guide_time_x = abs(pidx * self.PIX2TIME["-x"] * binning)
 
             x_n_dir = self.DIRECTIONS["-x"]
             if self.RA_AXIS == "x":
