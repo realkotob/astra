@@ -122,6 +122,14 @@ class GuidingCalibrator:
         )
 
         try:
+            self.astra_observatory.execute_and_monitor_device_task(
+                "Telescope",
+                "Tracking",
+                True,
+                "Tracking",
+                device_name=self.paired_devices["Telescope"],
+                log_message=f"Setting Telescope {self.paired_devices['Telescope']} tracking to True",
+            )
             self._telescope.get(
                 "SlewToCoordinatesAsync",
                 RightAscension=target_right_ascension,
