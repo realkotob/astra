@@ -1130,7 +1130,7 @@ class Autofocuser:
             bool: True if conditions are acceptable, False otherwise.
         """
         if not self.observatory.check_conditions(action=self.action):
-            self.observatory.logger.error("Autofocus aborted due to bad conditions.")
+            self.observatory.logger.warning("Autofocus aborted due to bad conditions.")
             self.success = False
 
         return self.success
